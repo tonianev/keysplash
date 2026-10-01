@@ -677,7 +677,7 @@ button {
 
 .ks-start__hint {
   margin: -4px 0 0;
-  color: var(--ks-on-3);
+  color: var(--ks-on-2);
   font: 400 14px/1 var(--ks-font-ui);
 }
 
@@ -767,7 +767,7 @@ button {
   margin: 0;
   padding: 0;
   list-style: none;
-  color: var(--ks-on-3);
+  color: var(--ks-on-2);
 }
 
 @media (max-width: 720px) {
@@ -1237,18 +1237,21 @@ button {
   border: 2px dashed var(--ks-line-strong);
   border-radius: 14px;
   font: 700 36px/1 var(--ks-font-kid);
-  color: var(--c-ink, var(--ks-on));
-  transition: background-color var(--ks-med) var(--ks-ease), border-color var(--ks-med) var(--ks-ease);
+  color: var(--ks-on-3);
+  transition: background-color var(--ks-med) var(--ks-ease), border-color var(--ks-med) var(--ks-ease), color var(--ks-med) var(--ks-ease);
 }
 
 .ks-slot.is-next {
   border-style: solid;
+  border-width: 3px;
   border-color: var(--c-hex, var(--ks-accent));
+  color: var(--c-ink, var(--ks-on));
 }
 
 .ks-slot.is-done {
   border-color: transparent;
   background: var(--c-container, var(--ks-surface-2));
+  color: var(--c-ink, var(--ks-on));
 }
 
 .ks-prompt__check {
@@ -1275,8 +1278,7 @@ button {
 }
 
 .ks-prompt.is-celebrating .ks-prompt__tile {
-  background: var(--c-hex, var(--ks-green));
-  color: #ffffff;
+  box-shadow: 0 0 0 3px var(--c-hex, var(--ks-green));
 }
 
 .ks-kbd {
@@ -1327,8 +1329,9 @@ button {
 }
 
 .ks-kbd__key.is-target {
-  background: var(--c-hex, var(--ks-accent));
-  color: #ffffff;
+  background: var(--c-container, var(--ks-accent-soft));
+  color: var(--c-ink, var(--ks-on));
+  box-shadow: 0 0 0 2px var(--c-hex, var(--ks-accent));
 }
 
 .ks-kbd__key.is-pulse {

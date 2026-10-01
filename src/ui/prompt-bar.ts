@@ -36,6 +36,13 @@ export function targetCode(challenge: Challenge): string | null {
   }
 }
 
+/** The label the target key should show: 'B', '3', or the next spell letter. */
+function wantedLabel(challenge: Challenge): string {
+  if (challenge.kind === 'find-letter') return challenge.target;
+  if (challenge.kind === 'find-number') return String(challenge.target);
+  return challenge.letters[challenge.index] ?? '';
+}
+
 function speakable(challenge: Challenge): string {
   switch (challenge.kind) {
     case 'find-letter':
@@ -56,6 +63,8 @@ export class DomPromptBar implements PromptBar {
   private visible = false;
   private celebrateTimer = 0;
   private current: Challenge | null = null;
+  /** A key whose label was swapped to the target letter (non-US layouts), with its original label. */
+  private relabeled: { key: HTMLElement; label: string } | null = null;
 
   constructor(root: HTMLElement, options: { rows?: readonly (readonly string[])[] } = {}) {
     this.el = el('div', 'ks-prompt');
@@ -101,10 +110,10 @@ export class DomPromptBar implements PromptBar {
     this.el.classList.add('is-shown');
   }
 
-  update(challenge: Challenge, hint: HintLevel): void {
+  update(challenge: Challenge, hint: HintLevel, code?: string | null): void {
     this.current = challenge;
     if (challenge.kind === 'spell') this.renderSlots(challenge);
-    this.setHint(challenge, hint);
+    this.setHint(challenge, hint, code);
   }
 
   celebrate(): void {
@@ -157,16 +166,28 @@ export class DomPromptBar implements PromptBar {
     if (!slots) return;
     slots.replaceChildren(
       ...challenge.letters.map((letter, i) => {
+        // Every letter is visible (muted until typed) so the child can match its shape to a key.
         const state = i < challenge.index ? 'is-done' : i === challenge.index ? 'is-next' : '';
-        return el('span', `ks-slot ${state}`.trim(), i < challenge.index ? letter.toLowerCase() : '');
+        return el('span', `ks-slot ${state}`.trim(), letter.toLowerCase());
       }),
     );
   }
 
-  private setHint(challenge: Challenge | null, hint: HintLevel): void {
+  private setHint(challenge: Challenge | null, hint: HintLevel, override?: string | null): void {
     for (const key of this.keys.values()) key.classList.remove('is-target', 'is-pulse');
-    const code = challenge && hint > 0 ? targetCode(challenge) : null;
+    if (this.relabeled) {
+      this.relabeled.key.textContent = this.relabeled.label;
+      this.relabeled = null;
+    }
+    const code = challenge && hint > 0 ? (override ?? targetCode(challenge)) : null;
+    // The diagram is drawn as US-QWERTY; a learned code still lands on the right physical spot,
+    // labelled with the letter that key really types.
     const key = code ? this.keys.get(code) : undefined;
+    const want = challenge ? wantedLabel(challenge) : '';
+    if (key && want && key.textContent !== want) {
+      this.relabeled = { key, label: key.textContent ?? '' };
+      key.textContent = want;
+    }
     this.el.classList.toggle('has-hint', !!key);
     if (key) {
       key.classList.add('is-target');

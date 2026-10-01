@@ -696,8 +696,11 @@ export interface StartScreen {
 export interface PromptBar {
   /** Show/replace the prompt for a challenge (spell: word letters with done ones filled). */
   show(challenge: Challenge): void;
-  /** Update the spell progress or hint state without re-animating the card. */
-  update(challenge: Challenge, hint: HintLevel): void;
+  /**
+   * Update the spell progress or hint state without re-animating the card.
+   * `targetCode` is the physical key to highlight (layout-aware); default US-QWERTY.
+   */
+  update(challenge: Challenge, hint: HintLevel, targetCode?: string | null): void;
   /** Brief success state (check + colour fill), ~900 ms; the game shows the next challenge after. */
   celebrate(): void;
   hide(): void;

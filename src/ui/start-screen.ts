@@ -63,6 +63,7 @@ export class DomStartScreen implements StartScreen {
   private readonly worldButtons = new Map<WorldId, HTMLButtonElement>();
   private readonly worldName: HTMLElement;
   private readonly modeButtons = new Map<PlayMode, HTMLButtonElement>();
+  private readonly modes: HTMLElement;
   private readonly secretWordEl: HTMLElement;
   private readonly unsubscribe: () => void;
 
@@ -125,7 +126,7 @@ export class DomStartScreen implements StartScreen {
     this.worldName.dataset.noStart = '';
     this.worldName.setAttribute('aria-hidden', 'true'); // the radios already announce it
 
-    const modes = el('div', 'ks-modes');
+    const modes = (this.modes = el('div', 'ks-modes'));
     modes.setAttribute('role', 'radiogroup');
     modes.setAttribute('aria-label', 'Choose an activity');
     modes.dataset.noStart = '';
@@ -145,6 +146,7 @@ export class DomStartScreen implements StartScreen {
       modes.append(card);
       this.modeButtons.set(mode.id, card);
     }
+    modes.addEventListener('keydown', this.onModesKey);
 
     main.append(this.greeting, title, subtitle, modes, this.play, hint, this.picker, this.worldName);
 
@@ -223,6 +225,7 @@ export class DomStartScreen implements StartScreen {
     for (const [id, card] of this.modeButtons) {
       const selected = id === settings.mode;
       card.setAttribute('aria-checked', String(selected));
+      card.tabIndex = selected ? 0 : -1;
       card.classList.toggle('is-selected', selected);
     }
     for (const [id, button] of this.worldButtons) {
@@ -260,8 +263,8 @@ export class DomStartScreen implements StartScreen {
     if (target instanceof Element && this.el.contains(target)) {
       // Let a focused button (Play, a world) activate natively instead.
       if ((event.key === 'Enter' || event.key === ' ') && target.closest('button')) return;
-      // Arrow keys move through the world picker.
-      if (event.key in ARROW_STEP && this.picker.contains(target)) return;
+      // Arrow keys move through the world picker and the activity cards.
+      if (event.key in ARROW_STEP && (this.picker.contains(target) || this.modes.contains(target))) return;
     }
     event.preventDefault();
     this.start();
@@ -272,6 +275,18 @@ export class DomStartScreen implements StartScreen {
     const button = target instanceof Element ? target.closest<HTMLButtonElement>('.ks-world') : null;
     const id = button?.dataset.world as WorldId | undefined;
     if (id && id !== this.deps.store.get().world) this.deps.store.update({ world: id });
+  };
+
+  /** Activity cards: roving radio-group navigation (arrows move and select). */
+  private readonly onModesKey = (event: KeyboardEvent): void => {
+    const step = ARROW_STEP[event.key];
+    if (!step) return;
+    event.preventDefault();
+    const ids = [...this.modeButtons.keys()];
+    const current = ids.indexOf(this.deps.store.get().mode);
+    const next = ids[(Math.max(0, current) + step + ids.length) % ids.length];
+    this.deps.store.update({ mode: next });
+    this.modeButtons.get(next)?.focus();
   };
 
   /** Roving radio-group navigation: arrows move and select. */

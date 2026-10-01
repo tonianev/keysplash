@@ -163,14 +163,6 @@ function noop(): void {
   // Intentionally empty.
 }
 
-/** The key code a challenge wants next (for spoken location hints). */
-function targetCode(challenge: Challenge): string | null {
-  if (challenge.kind === 'find-letter') return `Key${challenge.target}`;
-  if (challenge.kind === 'find-number') return `Digit${challenge.target}`;
-  const next = challenge.letters[challenge.index];
-  return next ? `Key${next}` : null;
-}
-
 function speechOn(s: Settings): boolean {
   return s.speech !== 'off' && !s.muted;
 }
@@ -296,6 +288,15 @@ export class Game {
   private rainbowUntil = Number.NEGATIVE_INFINITY;
   /** The location hint has been spoken for the current challenge. */
   private hintSpoken = false;
+  /**
+   * Between a found answer and the next prompt appearing: keys are free play,
+   * not judged against a target the child hasn't been shown yet.
+   */
+  private awaitingNext = false;
+  /** The next prompt came due while the page was hidden: show it on return. */
+  private promptOnVisible = false;
+  /** Which physical key types each letter on this keyboard (AZERTY/QWERTZ aware). ≤ 26 entries. */
+  private readonly letterCodes = new Map<string, string>();
   /** Clock time to repeat the game prompt when idle, or Infinity. */
   private idlePromptAt = Number.POSITIVE_INFINITY;
   private readonly recentX = new Float64Array(RECENT_SPOTS);
@@ -819,6 +820,10 @@ export class Game {
       this.endAllTrails();
       return;
     }
+    if (this.promptOnVisible && this.state === 'playing' && !this.panel.isOpen) {
+      const challenge = this.games.current();
+      if (challenge) this.showChallenge(challenge, true);
+    }
     if (this.state === 'alldone') this.audio.fadeTo(WIND_DOWN_LEVEL, 0.4);
     else if (this.windDownAt >= 0) {
       const remaining = Math.max(0.4, (WIND_DOWN_MS - (this.sessionMs - this.windDownAt)) / 1000);
@@ -897,6 +902,7 @@ export class Game {
     if (press.repeat) return;
     this.unlockAudio();
 
+    if (/^[a-z]$/i.test(press.key) && press.code) this.letterCodes.set(press.key.toUpperCase(), press.code);
     const content = this.lessons.forKey(press, this.content);
     this.countKey(press, content);
     if (content.kind === 'letter') this.progress.markSeen(content.letter);
@@ -906,7 +912,7 @@ export class Game {
     this.lastKeyAt = now;
 
     // Learning games judge deliberate presses only — mashing is always free play.
-    if (!mashing && this.settings.mode !== 'explore') {
+    if (!mashing && this.settings.mode !== 'explore' && !this.awaitingNext) {
       const outcome = this.games.judge(content, this.content);
       if (outcome.result === 'correct') {
         this.onCorrect(content, outcome, press);
@@ -945,7 +951,8 @@ export class Game {
 
     if (content.kind === 'digit') {
       this.remember(id, midi, content.speak, content.countWords);
-      if (!mashing) this.count(content.countWords, content.speak);
+      // In a game the prompt is the line that matters: count with ticks, not speech.
+      if (!mashing) this.count(this.settings.mode === 'explore' ? content.countWords : [], this.settings.mode === 'explore' ? content.speak : null, content.countWords.length);
       return;
     }
     this.remember(id, midi, content.speak, null);
@@ -987,14 +994,11 @@ export class Game {
   }
 
   /** Count out loud in step with the pictures appearing on the digit card. */
-  private count(words: string[], then: string | null): void {
+  private count(words: string[], then: string | null, ticks = words.length): void {
     this.clearLessonTimers(false);
-    if (words.length === 0) {
-      this.say(then);
-      return;
-    }
-    this.speaker.sequence(words, TIMING.countStepMs, then);
-    for (let i = 0; i < words.length; i++) {
+    if (words.length > 0) this.speaker.sequence(words, TIMING.countStepMs, then);
+    else this.say(then);
+    for (let i = 0; i < ticks; i++) {
       this.later(i * TIMING.countStepMs, () => this.audio.effect('count', { velocity: 0.35, step: i }));
     }
   }
@@ -1007,7 +1011,9 @@ export class Game {
     this.rainbowUntil = now + colors.length * TIMING.rainbowBandMs + 1500;
     this.clearLessonTimers(false);
     this.scene.special('rainbow', { colors });
-    if (this.settings.speech !== 'off') this.speaker.sequence(colors.map((c) => c.name), TIMING.rainbowBandMs);
+    // Name the colours in free play; in a game, don't talk over the prompt.
+    const quiet = this.settings.speech === 'off' || this.settings.mode !== 'explore' || now < this.quietUntil;
+    if (!quiet) this.speaker.sequence(colors.map((c) => c.name), TIMING.rainbowBandMs);
     const root = this.world.rootMidi;
     for (let i = 0; i < colors.length; i++) {
       this.later(i * TIMING.rainbowBandMs, () => {
@@ -1023,9 +1029,19 @@ export class Game {
   /** Show a challenge in the prompt bar (and optionally say its prompt). */
   private showChallenge(challenge: Challenge, speak: boolean): void {
     this.hintSpoken = false;
+    this.awaitingNext = false;
+    this.promptOnVisible = false;
     this.promptBar.show(this.retone(challenge));
     this.idlePromptAt = this.now() + IDLE_PROMPT_MS;
     if (speak) this.speaker.say(challenge.prompt, 'high');
+  }
+
+  /** The physical key a challenge wants next: learned from this keyboard, else US-QWERTY. */
+  private targetCode(challenge: Challenge): string | null {
+    if (challenge.kind === 'find-number') return `Digit${challenge.target}`;
+    const letter = challenge.kind === 'find-letter' ? challenge.target : challenge.letters[challenge.index];
+    if (!letter) return null;
+    return this.letterCodes.get(letter) ?? `Key${letter}`;
   }
 
   /** A challenge made in another world keeps its colour name but takes this world's tones. */
@@ -1043,9 +1059,10 @@ export class Game {
     this.speaker.say(outcome.say, 'high');
 
     const ch = outcome.challenge;
+    // Fill the slot (spell) / clear the hint — also for the last letter of a word.
+    this.promptBar.update(ch, 0, this.targetCode(ch));
     if (!outcome.complete) {
       this.audio.effect('chime', { velocity: 0.45 });
-      this.promptBar.update(ch, 0);
       return;
     }
 
@@ -1061,10 +1078,16 @@ export class Game {
     }
     const next = outcome.next;
     if (!next) return;
+    this.awaitingNext = true;
     const delay = Math.max(NEXT_PROMPT_MS, outcome.say.length * SPEECH_MS_PER_CHAR);
     this.nextPromptTimer = setTimeout(() => {
       this.nextPromptTimer = null;
-      if (this.state === 'playing' && !this.panel.isOpen) this.showChallenge(next, true);
+      if (this.state !== 'playing' || this.panel.isOpen) return; // resume shows it
+      if (!this.visibility.isVisible()) {
+        this.promptOnVisible = true;
+        return;
+      }
+      this.showChallenge(next, true);
     }, delay);
   }
 
@@ -1072,11 +1095,11 @@ export class Game {
     // Still show what they pressed (small, on the shelf) — every key teaches something.
     this.scene.showCard(this.cardFor(content, 'small', this.settings.layout === 'keyboard' ? this.spotFor(press.position) : null));
     this.audio.effect('retry', { velocity: 0.35 });
-    this.promptBar.update(outcome.challenge, outcome.hint);
+    this.promptBar.update(outcome.challenge, outcome.hint, this.targetCode(outcome.challenge));
     this.idlePromptAt = this.now() + IDLE_PROMPT_MS;
     let line = outcome.say;
     if (outcome.hint >= 2 && !this.hintSpoken) {
-      const code = targetCode(outcome.challenge);
+      const code = this.targetCode(outcome.challenge);
       if (code) {
         line = `${line ?? ''} ${describeKeyLocation(code)}`.trim();
         this.hintSpoken = true;

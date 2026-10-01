@@ -99,13 +99,13 @@ describe('DomPromptBar.show', () => {
     expect(q('[aria-live="polite"]').textContent).toBe('Find the number 7');
   });
 
-  it('spell: picture and one slot per letter, done ones filled in lower case', () => {
+  it('spell: picture and one slot per letter, every letter visible, done/next marked', () => {
     bar.show(spell(1));
     expect(q<HTMLElement>('.ks-prompt').dataset.kind).toBe('spell');
     expect(q('.ks-prompt__pic').textContent).toBe('🐱');
     expect(q('.ks-prompt__tile')).toBeNull();
     const slots = [...root.querySelectorAll<HTMLElement>('.ks-slot')];
-    expect(slots.map((s) => s.textContent)).toEqual(['c', '', '']);
+    expect(slots.map((s) => s.textContent)).toEqual(['c', 'a', 't']);
     expect(slots[0].classList.contains('is-done')).toBe(true);
     expect(slots[1].classList.contains('is-next')).toBe(true);
     expect(slots[2].className).toBe('ks-slot');
@@ -156,13 +156,13 @@ describe('DomPromptBar.update (hints and spell progress)', () => {
     bar.update(spell(0), 1);
     expect(targets()).toEqual(['KeyC']);
     bar.update(spell(1), 1);
-    expect([...root.querySelectorAll('.ks-slot')].map((s) => s.textContent)).toEqual(['c', '', '']);
+    expect([...root.querySelectorAll('.ks-slot.is-done')].map((s) => s.textContent)).toEqual(['c']);
     expect(targets()).toEqual(['KeyA']);
     bar.update(spell(2), 0);
-    expect([...root.querySelectorAll('.ks-slot')].map((s) => s.textContent)).toEqual(['c', 'a', '']);
+    expect([...root.querySelectorAll('.ks-slot.is-done')].map((s) => s.textContent)).toEqual(['c', 'a']);
     expect(targets()).toEqual([]);
     bar.update(spell(3), 2); // complete: nothing left to point at
-    expect([...root.querySelectorAll('.ks-slot')].map((s) => s.textContent)).toEqual(['c', 'a', 't']);
+    expect([...root.querySelectorAll('.ks-slot.is-done')].map((s) => s.textContent)).toEqual(['c', 'a', 't']);
     expect(targets()).toEqual([]);
     expect(q<HTMLElement>('.ks-prompt').classList.contains('has-hint')).toBe(false);
   });

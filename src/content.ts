@@ -28,8 +28,8 @@ export const BASE_WORDS: Record<string, WordEntry[]> = {
   F: [{ word: 'fish', emoji: '🐟' }, { word: 'frog', emoji: '🐸' }, { word: 'flower', emoji: '🌸' }],
   G: [{ word: 'giraffe', emoji: '🦒' }, { word: 'grapes', emoji: '🍇' }, { word: 'goat', emoji: '🐐' }],
   H: [{ word: 'hat', emoji: '🎩' }, { word: 'horse', emoji: '🐴' }, { word: 'house', emoji: '🏠' }],
-  I: [{ word: 'ice cream', emoji: '🍦' }, { word: 'insect', emoji: '🐛' }, { word: 'iguana', emoji: '🦎' }],
-  J: [{ word: 'juice', emoji: '🧃' }, { word: 'jacket', emoji: '🧥' }, { word: 'jeans', emoji: '👖' }],
+  I: [{ word: 'ice cream', emoji: '🍦' }, { word: 'ice', emoji: '🧊' }, { word: 'island', emoji: '🏝️' }],
+  J: [{ word: 'juice', emoji: '🧃' }, { word: 'jacket', emoji: '🧥' }, { word: 'jet', emoji: '🛩️' }],
   K: [{ word: 'kite', emoji: '🪁' }, { word: 'koala', emoji: '🐨' }, { word: 'key', emoji: '🔑' }],
   L: [{ word: 'lion', emoji: '🦁' }, { word: 'leaf', emoji: '🍃' }, { word: 'lemon', emoji: '🍋' }],
   M: [{ word: 'moon', emoji: '🌙' }, { word: 'monkey', emoji: '🐵' }, { word: 'milk', emoji: '🥛' }],
@@ -125,6 +125,9 @@ const FALLBACK_COLOR: NamedColor = { name: 'blue', hex: '#4A86D8', container: '#
 const LETTER_CODE = /^Key([A-Z])$/;
 const DIGIT_CODE = /^(?:Digit|Numpad)([0-9])$/;
 const ASCII_LETTER = /^[a-z]$/i;
+const NON_ASCII_LETTER = /^\p{L}$/u;
+/** `key` values that say nothing about the character (dead keys, IME, synthetic events). */
+const OPAQUE_KEYS = new Set(['', 'Unidentified', 'Dead', 'Process']);
 
 /** Small stable string hash (FNV-1a). */
 function hash(text: string): number {
@@ -209,8 +212,11 @@ export function praise(rng: () => number, childName = ''): string {
 
 /** The upper-case letter a key press means, or null. */
 export function letterFor(code: string, key: string): string | null {
-  // Prefer the printed letter (AZERTY/QWERTZ), fall back to the physical key.
+  // Prefer the printed letter (AZERTY/QWERTZ).
   if (ASCII_LETTER.test(key)) return key.toUpperCase();
+  // Non-Latin layouts (Cyrillic, Greek…) still teach the Latin letter on that physical key;
+  // punctuation that happens to sit on a letter key (AZERTY ',' on KeyM) is not a letter.
+  if (!NON_ASCII_LETTER.test(key) && !OPAQUE_KEYS.has(key)) return null;
   const m = LETTER_CODE.exec(code);
   return m ? m[1] : null;
 }

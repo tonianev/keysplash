@@ -173,7 +173,7 @@ const snow: World = {
   friends: ['🐧', '⛄', '❄️', '🦭', '🦊', '🐇', '🦌', '🧤', '🧣', '🛷', '🦉'],
   words: {
     D: [{ word: 'deer', emoji: '🦌' }],
-    M: [{ word: 'mittens', emoji: '🧤' }],
+    G: [{ word: 'gloves', emoji: '🧤' }],
     P: [{ word: 'penguin', emoji: '🐧' }],
     S: [{ word: 'snowman', emoji: '⛄' }, { word: 'sled', emoji: '🛷' }, { word: 'seal', emoji: '🦭' }],
   },

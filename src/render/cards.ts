@@ -217,11 +217,24 @@ function wordLine(
     [word.slice(b), neutral],
   ];
   let x = cx - total / 2;
-  for (const [text, color] of parts) {
+  for (let i = 0; i < parts.length; i++) {
+    const [text, color] = parts[i];
     if (!text) continue;
+    const w = ctx.measureText(text).width;
     ctx.fillStyle = color;
     ctx.fillText(text, x, y);
-    x += ctx.measureText(text).width;
+    if (i === 1) {
+      // A non-colour cue for the featured letter (colour-blind friendly).
+      const lw = Math.max(2, size * 0.07);
+      ctx.strokeStyle = ink;
+      ctx.lineWidth = lw;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(x + lw, y + size * 0.16);
+      ctx.lineTo(x + w - lw, y + size * 0.16);
+      ctx.stroke();
+    }
+    x += w;
   }
 }
 
@@ -241,7 +254,8 @@ export function renderCard(spec: CardSpec, w: number, h: number, style: CardStyl
   const surface = spec.kind === 'picture' || !spec.color ? world.surface : spec.color.container;
   const ink = spec.color?.ink ?? world.onSurface;
   // The featured letter is drawn in ink; the rest of the word steps back so it stands out.
-  const neutral = world.dark ? '#98A1B3' : '#5B616B';
+  // Lightness (not just hue) separates them, and the featured letter is also underlined.
+  const neutral = world.dark ? '#98A1B3' : '#7A808A';
   const radius = Math.min(w * 0.12, h * 0.18);
 
   // Baked elevation: a tight contact shadow and a soft ambient one.
