@@ -201,3 +201,33 @@ function foldIntoRange(midi: number): number {
 export function knownKeyCodes(): string[] {
   return Array.from(positions.keys());
 }
+
+/** Rows of a simplified keyboard for the learning-game hint diagram. */
+export const KEYBOARD_ROWS: readonly (readonly string[])[] = Object.freeze([
+  Object.freeze(Array.from('1234567890', (d) => `Digit${d}`)),
+  Object.freeze(Array.from('QWERTYUIOP', (c) => `Key${c}`)),
+  Object.freeze(Array.from('ASDFGHJKL', (c) => `Key${c}`)),
+  Object.freeze(Array.from('ZXCVBNM', (c) => `Key${c}`)),
+  Object.freeze(['Space']),
+]);
+
+const ROW_NAMES = ['on the number row', 'in the top row', 'in the middle row', 'in the bottom row', 'at the bottom'];
+
+/**
+ * A short spoken hint for where a key is, e.g. 'It is in the middle row, on
+ * the left.' Numpad digits are described like the number row.
+ */
+export function describeKeyLocation(code: string): string {
+  const pad = /^Numpad([0-9])$/.exec(code);
+  const lookup = pad ? `Digit${pad[1]}` : code;
+  for (let r = 0; r < KEYBOARD_ROWS.length; r++) {
+    const row = KEYBOARD_ROWS[r];
+    const i = row.indexOf(lookup);
+    if (i < 0) continue;
+    if (row.length === 1) return `It is the long key ${ROW_NAMES[r]}.`;
+    const t = i / (row.length - 1);
+    const side = t < 0.34 ? 'on the left' : t > 0.66 ? 'on the right' : 'in the middle';
+    return `It is ${ROW_NAMES[r]}, ${side}.`;
+  }
+  return 'Look carefully at the keys.';
+}

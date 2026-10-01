@@ -1,129 +1,51 @@
 /**
- * What a key press (or a tap) *means*: a letter with a picture and a word, a
- * number that counts, a named shape, a special effect or a world friend.
+ * What a key press (or a tap) *teaches* — v2, see DESIGN.md §4.
  *
- * Keys are identified by `KeyboardEvent.code`, so the same physical key always
- * gives the same colour and shape. Speech strings are spelled so that speech
- * synthesis pronounces them the way a parent would ("ay… apple!").
+ * Nothing here is random for key presses: the same key always gives the same
+ * letter colour, shape, picture and note, and each letter's words rotate in a
+ * fixed order so repetition builds familiarity. Speech strings are spelled so
+ * speech synthesis says them the way a parent would ("bee… bee is for ball").
  */
-import type { ContentContext, KeyContent, NamedColor, ShapeKind, SpecialEffect, WordEntry } from './types';
+import type {
+  ColorName,
+  ContentContext,
+  DirectionName,
+  KeyContent,
+  NamedColor,
+  ShapeKind,
+  SpecialEffect,
+  WordEntry,
+  World,
+} from './types';
 
-/** 'A'…'Z' → toddler words with one clear emoji each (Unicode ≤ 12, no ZWJ). */
+/** 'A'…'Z' → toddler-familiar nouns, each with one clear emoji (Unicode ≤ 13, no ZWJ). */
 export const BASE_WORDS: Record<string, WordEntry[]> = {
-  A: [
-    { word: 'apple', emoji: '🍎' },
-    { word: 'ant', emoji: '🐜' },
-    { word: 'airplane', emoji: '✈️' },
-  ],
-  B: [
-    { word: 'ball', emoji: '⚽' },
-    { word: 'banana', emoji: '🍌' },
-    { word: 'bear', emoji: '🐻' },
-  ],
-  C: [
-    { word: 'cat', emoji: '🐱' },
-    { word: 'car', emoji: '🚗' },
-    { word: 'cake', emoji: '🍰' },
-  ],
-  D: [
-    { word: 'dog', emoji: '🐶' },
-    { word: 'duck', emoji: '🦆' },
-    { word: 'drum', emoji: '🥁' },
-  ],
-  E: [
-    { word: 'elephant', emoji: '🐘' },
-    { word: 'egg', emoji: '🥚' },
-  ],
-  F: [
-    { word: 'fish', emoji: '🐟' },
-    { word: 'frog', emoji: '🐸' },
-    { word: 'flower', emoji: '🌸' },
-  ],
-  G: [
-    { word: 'giraffe', emoji: '🦒' },
-    { word: 'grapes', emoji: '🍇' },
-    { word: 'goat', emoji: '🐐' },
-  ],
-  H: [
-    { word: 'horse', emoji: '🐴' },
-    { word: 'hat', emoji: '🎩' },
-    { word: 'house', emoji: '🏠' },
-  ],
-  I: [
-    { word: 'ice cream', emoji: '🍦' },
-    { word: 'iguana', emoji: '🦎' },
-  ],
-  J: [
-    { word: 'juice', emoji: '🧃' },
-    { word: 'jacket', emoji: '🧥' },
-  ],
-  K: [
-    { word: 'kite', emoji: '🪁' },
-    { word: 'koala', emoji: '🐨' },
-    { word: 'key', emoji: '🔑' },
-  ],
-  L: [
-    { word: 'lion', emoji: '🦁' },
-    { word: 'leaf', emoji: '🍃' },
-    { word: 'lemon', emoji: '🍋' },
-  ],
-  M: [
-    { word: 'moon', emoji: '🌙' },
-    { word: 'monkey', emoji: '🐵' },
-    { word: 'milk', emoji: '🥛' },
-  ],
-  N: [
-    { word: 'nose', emoji: '👃' },
-    { word: 'nut', emoji: '🥜' },
-  ],
-  O: [
-    { word: 'octopus', emoji: '🐙' },
-    { word: 'owl', emoji: '🦉' },
-    { word: 'orange', emoji: '🍊' },
-  ],
-  P: [
-    { word: 'pig', emoji: '🐷' },
-    { word: 'penguin', emoji: '🐧' },
-    { word: 'pizza', emoji: '🍕' },
-  ],
-  Q: [
-    { word: 'queen', emoji: '👸' },
-    { word: 'quack', emoji: '🦆' },
-  ],
-  R: [
-    { word: 'rainbow', emoji: '🌈' },
-    { word: 'rabbit', emoji: '🐰' },
-    { word: 'rocket', emoji: '🚀' },
-  ],
-  S: [
-    { word: 'sun', emoji: '☀️' },
-    { word: 'star', emoji: '⭐' },
-    { word: 'snail', emoji: '🐌' },
-  ],
-  T: [
-    { word: 'turtle', emoji: '🐢' },
-    { word: 'train', emoji: '🚂' },
-    { word: 'tiger', emoji: '🐯' },
-  ],
-  U: [
-    { word: 'umbrella', emoji: '☂️' },
-    { word: 'unicorn', emoji: '🦄' },
-  ],
-  V: [
-    { word: 'violin', emoji: '🎻' },
-    { word: 'volcano', emoji: '🌋' },
-    { word: 'van', emoji: '🚐' },
-  ],
-  W: [
-    { word: 'whale', emoji: '🐳' },
-    { word: 'watermelon', emoji: '🍉' },
-    { word: 'wave', emoji: '👋' },
-  ],
-  X: [{ word: 'xylophone', emoji: '🎶' }],
-  Y: [
-    { word: 'yo-yo', emoji: '🪀' },
-    { word: 'yarn', emoji: '🧶' },
-  ],
+  A: [{ word: 'apple', emoji: '🍎' }, { word: 'ant', emoji: '🐜' }, { word: 'airplane', emoji: '✈️' }],
+  B: [{ word: 'ball', emoji: '⚽' }, { word: 'bear', emoji: '🐻' }, { word: 'banana', emoji: '🍌' }],
+  C: [{ word: 'cat', emoji: '🐱' }, { word: 'car', emoji: '🚗' }, { word: 'cake', emoji: '🍰' }],
+  D: [{ word: 'dog', emoji: '🐶' }, { word: 'duck', emoji: '🦆' }, { word: 'drum', emoji: '🥁' }],
+  E: [{ word: 'egg', emoji: '🥚' }, { word: 'elephant', emoji: '🐘' }, { word: 'ear', emoji: '👂' }],
+  F: [{ word: 'fish', emoji: '🐟' }, { word: 'frog', emoji: '🐸' }, { word: 'flower', emoji: '🌸' }],
+  G: [{ word: 'giraffe', emoji: '🦒' }, { word: 'grapes', emoji: '🍇' }, { word: 'goat', emoji: '🐐' }],
+  H: [{ word: 'hat', emoji: '🎩' }, { word: 'horse', emoji: '🐴' }, { word: 'house', emoji: '🏠' }],
+  I: [{ word: 'ice cream', emoji: '🍦' }, { word: 'insect', emoji: '🐛' }, { word: 'iguana', emoji: '🦎' }],
+  J: [{ word: 'juice', emoji: '🧃' }, { word: 'jacket', emoji: '🧥' }, { word: 'jeans', emoji: '👖' }],
+  K: [{ word: 'kite', emoji: '🪁' }, { word: 'koala', emoji: '🐨' }, { word: 'key', emoji: '🔑' }],
+  L: [{ word: 'lion', emoji: '🦁' }, { word: 'leaf', emoji: '🍃' }, { word: 'lemon', emoji: '🍋' }],
+  M: [{ word: 'moon', emoji: '🌙' }, { word: 'monkey', emoji: '🐵' }, { word: 'milk', emoji: '🥛' }],
+  N: [{ word: 'nose', emoji: '👃' }, { word: 'nut', emoji: '🥜' }, { word: 'net', emoji: '🥅' }],
+  O: [{ word: 'owl', emoji: '🦉' }, { word: 'octopus', emoji: '🐙' }, { word: 'orange', emoji: '🍊' }],
+  P: [{ word: 'pig', emoji: '🐷' }, { word: 'penguin', emoji: '🐧' }, { word: 'pizza', emoji: '🍕' }],
+  Q: [{ word: 'queen', emoji: '👸' }],
+  R: [{ word: 'rainbow', emoji: '🌈' }, { word: 'rabbit', emoji: '🐰' }, { word: 'rocket', emoji: '🚀' }],
+  S: [{ word: 'sun', emoji: '☀️' }, { word: 'star', emoji: '⭐' }, { word: 'snail', emoji: '🐌' }],
+  T: [{ word: 'tree', emoji: '🌳' }, { word: 'turtle', emoji: '🐢' }, { word: 'train', emoji: '🚂' }],
+  U: [{ word: 'umbrella', emoji: '☂️' }, { word: 'unicorn', emoji: '🦄' }],
+  V: [{ word: 'van', emoji: '🚐' }, { word: 'violin', emoji: '🎻' }, { word: 'volcano', emoji: '🌋' }],
+  W: [{ word: 'whale', emoji: '🐳' }, { word: 'watermelon', emoji: '🍉' }, { word: 'worm', emoji: '🪱' }],
+  // Few toddler nouns start with x, so feature the x inside familiar words.
+  X: [{ word: 'fox', emoji: '🦊', at: 2 }, { word: 'box', emoji: '📦', at: 2 }],
+  Y: [{ word: 'yo-yo', emoji: '🪀' }, { word: 'yarn', emoji: '🧶' }],
   Z: [{ word: 'zebra', emoji: '🦓' }],
 };
 
@@ -137,55 +59,74 @@ const LETTER_NAMES: Record<string, string> = {
 const NUMBER_WORDS = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'];
 
 const SHAPE_LABELS: Record<ShapeKind, string> = {
-  circle: 'circle',
-  square: 'square',
-  triangle: 'triangle',
-  star: 'star',
-  heart: 'heart',
-  diamond: 'diamond',
-  moon: 'moon',
-  flower: 'flower',
-  hexagon: 'hexagon',
-  cloud: 'cloud',
+  circle: 'circle', square: 'square', triangle: 'triangle', star: 'star', heart: 'heart',
+  diamond: 'diamond', moon: 'moon', oval: 'oval', hexagon: 'hexagon', rectangle: 'rectangle',
 };
-
 const SHAPES = Object.keys(SHAPE_LABELS) as ShapeKind[];
 
-/**
- * Punctuation / symbol keys in rough physical order. Each gets the shape at its
- * index (mod 10), so neighbouring keys show different shapes.
- */
-const SYMBOL_CODES = [
-  'Backquote', 'Minus', 'Equal', 'BracketLeft', 'BracketRight', 'Backslash',
-  'Semicolon', 'Quote', 'Comma', 'Period', 'Slash',
-  'IntlBackslash', 'IntlRo', 'IntlYen',
-  'NumpadDivide', 'NumpadMultiply', 'NumpadSubtract', 'NumpadAdd',
-  'NumpadDecimal', 'NumpadEqual', 'NumpadComma',
+/** Countable things for digit cards: [singular, plural, emoji]. Fixed per digit. */
+const COUNTABLES: ReadonlyArray<readonly [string, string, string]> = [
+  ['star', 'stars', '⭐'],
+  ['apple', 'apples', '🍎'],
+  ['ball', 'balls', '⚽'],
+  ['duck', 'ducks', '🦆'],
+  ['fish', 'fish', '🐟'],
+  ['flower', 'flowers', '🌸'],
+  ['balloon', 'balloons', '🎈'],
+  ['car', 'cars', '🚗'],
+  ['bear', 'bears', '🐻'],
+  ['heart', 'hearts', '❤️'],
 ];
-const SYMBOL_SHAPE = new Map<string, ShapeKind>(SYMBOL_CODES.map((code, i) => [code, SHAPES[i % SHAPES.length]]));
+
+/**
+ * Pictures for every other key (modifiers, F-keys, Tab, Esc…): farm/home
+ * animals and objects. Fixed per key code; unknown codes hash into the list.
+ */
+const PICTURES: ReadonlyArray<readonly [string, string]> = [
+  ['cow', '🐄'], ['pig', '🐖'], ['sheep', '🐑'], ['horse', '🐎'], ['hen', '🐔'], ['duck', '🦆'],
+  ['dog', '🐕'], ['cat', '🐈'], ['rabbit', '🐇'], ['mouse', '🐁'], ['frog', '🐸'], ['owl', '🦉'],
+  ['bee', '🐝'], ['ladybug', '🐞'], ['turtle', '🐢'], ['fish', '🐟'], ['bird', '🐦'], ['bear', '🐻'],
+  ['lion', '🦁'], ['elephant', '🐘'], ['giraffe', '🦒'], ['zebra', '🦓'], ['monkey', '🐒'], ['penguin', '🐧'],
+  ['car', '🚗'], ['bus', '🚌'], ['train', '🚂'], ['boat', '⛵'], ['airplane', '✈️'], ['ball', '⚽'],
+];
+
+/** Codes with a deliberate picture, so the most-hit keys feel intentional. */
+const PICTURE_FOR_CODE: Record<string, number> = {
+  ShiftLeft: 0, ShiftRight: 1, ControlLeft: 2, ControlRight: 3, AltLeft: 4, AltRight: 5,
+  MetaLeft: 6, MetaRight: 7, Tab: 8, CapsLock: 9, Escape: 10, ContextMenu: 11,
+  F1: 12, F2: 13, F3: 14, F4: 15, F5: 16, F6: 17, F7: 18, F8: 19, F9: 20, F10: 21, F11: 22, F12: 23,
+  Insert: 24, Home: 25, End: 26, PageUp: 27, PageDown: 28, Fn: 29,
+};
+
+/** Punctuation/symbol keys → a fixed shape and colour each. */
+const SYMBOL_CODES = [
+  'Minus', 'Equal', 'BracketLeft', 'BracketRight', 'Backslash', 'Semicolon', 'Quote', 'Comma',
+  'Period', 'Slash', 'Backquote', 'IntlBackslash', 'IntlRo', 'IntlYen', 'NumpadAdd', 'NumpadSubtract',
+  'NumpadMultiply', 'NumpadDivide', 'NumpadDecimal', 'NumpadEqual', 'NumpadComma',
+];
+const SYMBOL_INDEX = new Map<string, number>(SYMBOL_CODES.map((code, i) => [code, i]));
 
 const SPECIALS: Record<string, SpecialEffect> = {
   Space: 'rainbow',
-  Enter: 'sweep',
-  NumpadEnter: 'sweep',
-  Backspace: 'pop-all',
-  Delete: 'pop-all',
-  ArrowUp: 'comet-up',
-  ArrowDown: 'comet-down',
-  ArrowLeft: 'comet-left',
-  ArrowRight: 'comet-right',
+  Enter: 'clear', NumpadEnter: 'clear', Backspace: 'clear', Delete: 'clear',
 };
 
-const CHEERS = ['Wow!', 'Whee!', 'Boom!', 'Yay!', 'Hooray!', 'Woo-hoo!', 'Ta-da!', 'Amazing!', 'Super!', 'Yippee!'];
+const DIRECTIONS: Record<string, DirectionName> = {
+  ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right',
+};
+const DIRECTION_COLOR: Record<DirectionName, ColorName> = { up: 'blue', down: 'green', left: 'orange', right: 'purple' };
 
-const FALLBACK_COLOR: NamedColor = { name: 'blue', hex: '#5cc8ff' };
-const FALLBACK_EMOJI = '⭐';
+const RAINBOW_ORDER: ColorName[] = ['red', 'orange', 'yellow', 'green', 'blue', 'purple'];
+
+const PRAISE = ['Great job!', 'You did it!', 'Wonderful!', 'Well done!', 'Hooray!', 'Super!', 'Yay!', 'Amazing!'];
+
+const FALLBACK_COLOR: NamedColor = { name: 'blue', hex: '#4A86D8', container: '#DFEAFB', ink: '#1D4F99' };
 
 const LETTER_CODE = /^Key([A-Z])$/;
 const DIGIT_CODE = /^(?:Digit|Numpad)([0-9])$/;
 const ASCII_LETTER = /^[a-z]$/i;
 
-/** FNV-1a: a small, stable string hash (same code → same number, every session). */
+/** Small stable string hash (FNV-1a). */
 function hash(text: string): number {
   let h = 0x811c9dc5;
   for (let i = 0; i < text.length; i++) {
@@ -195,111 +136,204 @@ function hash(text: string): number {
   return h >>> 0;
 }
 
-/** Index in [0, length) from a random source, robust to rng() returning exactly 1. */
-function pickIndex(rng: () => number, length: number): number {
-  const i = Math.floor(rng() * length);
-  return i >= 0 && i < length ? i : 0;
+function paletteAt(world: World, index: number): NamedColor {
+  const p = world.palette;
+  return p.length ? p[((index % p.length) + p.length) % p.length] : FALLBACK_COLOR;
 }
 
-function pick<T>(rng: () => number, list: readonly T[], fallback: T): T {
-  return list.length > 0 ? list[pickIndex(rng, list.length)] : fallback;
+function colorNamed(world: World, name: ColorName): NamedColor {
+  return world.palette.find((c) => c.name === name) ?? paletteAt(world, RAINBOW_ORDER.indexOf(name));
 }
 
-function colorFor(id: string, ctx: ContentContext): NamedColor {
-  const palette = ctx.world.palette;
-  return palette.length > 0 ? palette[hash(id) % palette.length] : FALLBACK_COLOR;
+// ---------------------------------------------------------------------------
+// Public helpers (shared with the learning games and the UI)
+// ---------------------------------------------------------------------------
+
+/** Phonetic letter name for speech: 'B' → 'bee'. */
+export function letterName(letter: string): string {
+  return LETTER_NAMES[letter.toUpperCase()] ?? letter.toLowerCase();
 }
 
-function friend(ctx: ContentContext): string {
-  return pick(ctx.rng, ctx.world.friends, FALLBACK_EMOJI);
-}
-
+/** 0..10 → 'zero'…'ten'; other numbers as digits. */
 export function numberWord(n: number): string {
-  return Number.isInteger(n) && n >= 0 && n < NUMBER_WORDS.length ? NUMBER_WORDS[n] : String(n);
+  return NUMBER_WORDS[n] ?? String(n);
 }
 
 export function shapeLabel(shape: ShapeKind): string {
-  return SHAPE_LABELS[shape] ?? String(shape);
+  return SHAPE_LABELS[shape] ?? shape;
 }
 
-export function cheer(rng: () => number): string {
-  return pick(rng, CHEERS, 'Yay!');
+export function directionWord(direction: DirectionName): string {
+  return direction;
 }
+
+/** A letter's colour: fixed per letter (A red, B orange, C yellow… cycling the palette). */
+export function letterColor(letter: string, world: World): NamedColor {
+  const i = letter.toUpperCase().charCodeAt(0) - 65;
+  return paletteAt(world, i >= 0 && i < 26 ? i : hash(letter));
+}
+
+/** A digit's colour: fixed per digit. */
+export function digitColor(digit: number, world: World): NamedColor {
+  return paletteAt(world, digit + 1);
+}
+
+/** Cased display for a letter: 'B', 'b' or 'Bb'. */
+export function displayLetter(letter: string, letterCase: 'upper' | 'lower' | 'both'): string {
+  const upper = letter.toUpperCase();
+  if (letterCase === 'lower') return upper.toLowerCase();
+  if (letterCase === 'both') return upper + upper.toLowerCase();
+  return upper;
+}
+
+/** World-themed words first, then the base words (no duplicates). */
+export function wordsFor(letter: string, world: World): WordEntry[] {
+  const upper = letter.toUpperCase();
+  const themed = world.words?.[upper] ?? [];
+  const base = BASE_WORDS[upper] ?? [];
+  const seen = new Set(themed.map((w) => w.word));
+  return [...themed, ...base.filter((w) => !seen.has(w.word))];
+}
+
+/** The six rainbow colours of a world, outermost band first. */
+export function rainbowColors(world: World): NamedColor[] {
+  return RAINBOW_ORDER.map((name) => colorNamed(world, name));
+}
+
+/** Warm praise; sometimes with the child's name. */
+export function praise(rng: () => number, childName = ''): string {
+  const name = childName.trim();
+  if (name && rng() < 0.35) return `Great job, ${name}!`;
+  return PRAISE[Math.min(PRAISE.length - 1, Math.floor(rng() * PRAISE.length))];
+}
+
+/** The upper-case letter a key press means, or null. */
+export function letterFor(code: string, key: string): string | null {
+  // Prefer the printed letter (AZERTY/QWERTZ), fall back to the physical key.
+  if (ASCII_LETTER.test(key)) return key.toUpperCase();
+  const m = LETTER_CODE.exec(code);
+  return m ? m[1] : null;
+}
+
+/** The digit a key press means (number row or numpad), or null. */
+export function digitFor(code: string): number | null {
+  const m = DIGIT_CODE.exec(code);
+  return m ? Number(m[1]) : null;
+}
+
+// ---------------------------------------------------------------------------
+// LessonContent: key press → what it teaches
+// ---------------------------------------------------------------------------
 
 /**
- * Upper-case letter for a letter key. Prefers the printed letter (`key`) when it
- * is a plain Latin letter, so AZERTY/QWERTZ keyboards show what is on the keycap;
- * otherwise (non-Latin layouts, Option/AltGr symbols) falls back to the physical code.
+ * Turns key presses and taps into lessons. Holds one word cursor per letter so
+ * each letter's words rotate in order (ball → bear → banana → ball…). Key
+ * presses never use randomness; only taps do (a random shape at your finger).
  */
-function letterFor(code: string, key: string): string | null {
-  const m = LETTER_CODE.exec(code);
-  if (!m) return null;
-  return ASCII_LETTER.test(key) ? key.toUpperCase() : m[1];
-}
+export class LessonContent {
+  /** Next word index per upper-case letter (bounded: at most 26 entries). */
+  private readonly cursors = new Map<string, number>();
+  private taps = 0;
 
-export function contentForKey(press: { code: string; key: string }, ctx: ContentContext): KeyContent {
-  const code = typeof press.code === 'string' ? press.code : '';
-  const key = typeof press.key === 'string' ? press.key : '';
-  const speech = ctx.settings.speech;
+  forKey(press: { code: string; key: string }, ctx: ContentContext): KeyContent {
+    const { code, key } = press;
+    const { world, settings } = ctx;
+    const speech = settings.speech;
 
-  const letter = letterFor(code, key);
-  if (letter) {
-    const override = ctx.world.words?.[letter];
-    const words = override && override.length > 0 ? override : (BASE_WORDS[letter] ?? []);
-    const word = words.length > 0 ? words[pickIndex(ctx.rng, words.length)] : null;
-    const lower = letter.toLowerCase();
-    const display =
-      ctx.settings.letterCase === 'lower' ? lower : ctx.settings.letterCase === 'both' ? letter + lower : letter;
-    const name = LETTER_NAMES[letter];
-    let speak: string | null = null;
-    if (speech === 'letter') speak = name;
-    else if (speech === 'word') speak = word ? `${name}… ${word.word}!` : name;
-    return { kind: 'letter', letter, display, word, color: colorFor(`Key${letter}`, ctx), speak };
+    const special = SPECIALS[code];
+    if (special) {
+      return { kind: 'special', effect: special, speak: special === 'clear' && speech === 'word' ? 'all clean!' : null };
+    }
+
+    const direction = DIRECTIONS[code];
+    if (direction) {
+      return {
+        kind: 'direction',
+        direction,
+        color: colorNamed(world, DIRECTION_COLOR[direction]),
+        speak: speech === 'off' ? null : `${direction}!`,
+      };
+    }
+
+    const digit = digitFor(code);
+    if (digit !== null) return this.digit(digit, ctx);
+
+    const letter = letterFor(code, key);
+    if (letter) return this.letter(letter, ctx);
+
+    const symbol = SYMBOL_INDEX.get(code);
+    if (symbol !== undefined) {
+      const shape = SHAPES[symbol % SHAPES.length];
+      return this.shape(shape, paletteAt(world, symbol * 3), ctx, true);
+    }
+
+    const [word, emoji] = PICTURES[PICTURE_FOR_CODE[code] ?? hash(code || 'none') % PICTURES.length];
+    return { kind: 'picture', emoji, word, speak: speech === 'off' ? null : word };
   }
 
-  const digitMatch = DIGIT_CODE.exec(code);
-  if (digitMatch) {
-    const digit = Number(digitMatch[1]);
-    const friends = ctx.world.friends;
+  /** A tap on empty space: a random shape and colour, named every third tap. */
+  forTap(ctx: ContentContext): KeyContent {
+    const { rng, world } = ctx;
+    const shape = SHAPES[Math.min(SHAPES.length - 1, Math.floor(rng() * SHAPES.length))];
+    const color = paletteAt(world, Math.floor(rng() * world.palette.length));
+    this.taps = (this.taps + 1) % 3;
+    return this.shape(shape, color, ctx, this.taps === 0);
+  }
+
+  /** The word a letter would show next, without advancing (for prompts). */
+  peekWord(letter: string, world: World): WordEntry {
+    const list = wordsFor(letter, world);
+    const i = this.cursors.get(letter.toUpperCase()) ?? 0;
+    return list[i % Math.max(1, list.length)] ?? { word: letter.toLowerCase(), emoji: '⭐' };
+  }
+
+  private letter(letter: string, ctx: ContentContext): KeyContent {
+    const { world, settings } = ctx;
+    const list = wordsFor(letter, world);
+    const i = this.cursors.get(letter) ?? 0;
+    const word = list[i % Math.max(1, list.length)] ?? { word: letter.toLowerCase(), emoji: '⭐' };
+    this.cursors.set(letter, (i + 1) % Math.max(1, list.length));
+
+    const name = letterName(letter);
+    let speak: string | null = null;
+    if (settings.speech === 'letter') speak = name;
+    else if (settings.speech === 'word') {
+      speak = (word.at ?? 0) === 0 ? `${name}… ${name} is for ${word.word}` : `${name}… ${word.word}`;
+    }
+    return {
+      kind: 'letter',
+      letter,
+      display: displayLetter(letter, settings.letterCase),
+      word,
+      color: letterColor(letter, world),
+      speak,
+    };
+  }
+
+  private digit(digit: number, ctx: ContentContext): KeyContent {
+    const { world, settings } = ctx;
+    const [singular, plural, emoji] = COUNTABLES[digit % COUNTABLES.length];
+    const noun = digit === 1 ? singular : plural;
+    const counting = settings.speech !== 'off';
+    const countWords = counting ? NUMBER_WORDS.slice(1, digit + 1) : [];
+    let speak: string | null = null;
+    if (settings.speech === 'word') speak = digit === 0 ? 'zero — none!' : `${numberWord(digit)} ${noun}!`;
+    else if (settings.speech === 'letter' && digit === 0) speak = 'zero';
     return {
       kind: 'digit',
       digit,
       display: String(digit),
-      countEmoji: friends.length > 0 ? friends[digit % friends.length] : FALLBACK_EMOJI,
-      // Top-row 3 and numpad 3 share a colour: "three is always orange".
-      color: colorFor(`Digit${digit}`, ctx),
-      speak: speech === 'off' ? null : numberWord(digit),
+      countEmoji: emoji,
+      countNoun: noun,
+      color: digitColor(digit, world),
+      countWords,
+      speak,
     };
   }
 
-  const shape = SYMBOL_SHAPE.get(code);
-  if (shape) {
-    const color = colorFor(code, ctx);
-    return {
-      kind: 'shape',
-      shape,
-      color,
-      speak: speech === 'off' ? null : `${color.name} ${shapeLabel(shape)}`,
-    };
+  private shape(shape: ShapeKind, color: NamedColor, ctx: ContentContext, named: boolean): KeyContent {
+    const label = shapeLabel(shape);
+    const speak = named && ctx.settings.speech !== 'off' ? `${color.name} ${label}` : null;
+    return { kind: 'shape', shape, color, label, speak };
   }
-
-  const effect = Object.prototype.hasOwnProperty.call(SPECIALS, code) ? SPECIALS[code] : undefined;
-  if (effect) {
-    return { kind: 'special', effect, speak: effect === 'rainbow' && speech === 'word' ? 'rainbow!' : null };
-  }
-
-  // Modifiers, F-keys, Tab, Escape, media keys, 'Unidentified', '' …
-  return { kind: 'emoji', emoji: friend(ctx), speak: null };
-}
-
-/** A tap on empty space: half the time a named shape, otherwise a world friend. */
-export function contentForTap(ctx: ContentContext): KeyContent {
-  if (ctx.rng() < 0.5) {
-    const shape = pick(ctx.rng, SHAPES, 'circle');
-    const color = pick(ctx.rng, ctx.world.palette, FALLBACK_COLOR);
-    // Naming every tap gets chatty; name roughly one in three.
-    const speak = ctx.settings.speech !== 'off' && ctx.rng() < 1 / 3 ? `${color.name} ${shapeLabel(shape)}` : null;
-    return { kind: 'shape', shape, color, speak };
-  }
-  return { kind: 'emoji', emoji: friend(ctx), speak: null };
 }

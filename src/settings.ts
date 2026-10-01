@@ -8,8 +8,10 @@
  */
 import type {
   Intensity,
+  Layout,
   LetterCase,
   MotionPref,
+  PlayMode,
   Settings,
   SettingsStore,
   SizeLevel,
@@ -20,22 +22,23 @@ import type {
 export const SETTINGS_STORAGE_KEY = 'keysplash:settings:v1';
 
 export const DEFAULT_SETTINGS: Settings = Object.freeze({
-  world: 'space',
+  world: 'paper',
+  mode: 'explore',
+  layout: 'focus',
   autoRotate: false,
   rotateMinutes: 5,
-  volume: 0.7,
+  volume: 0.6,
   muted: false,
   notes: true,
   speech: 'word',
   voiceURI: null,
-  letterCase: 'upper',
+  letterCase: 'both',
   pictures: true,
   size: 'big',
   intensity: 'normal',
   motion: 'system',
   trails: true,
-  faces: true,
-  spatialKeys: true,
+  faces: false,
   childName: '',
   sessionMinutes: 0,
   secretWord: 'parent',
@@ -45,12 +48,18 @@ export const DEFAULT_SETTINGS: Settings = Object.freeze({
 
 // `Record<Union, true>` makes the compiler insist every member is listed.
 const WORLD_IDS: Record<WorldId, true> = {
-  space: true, ocean: true, garden: true, party: true, bubbles: true, dino: true, night: true,
+  paper: true, garden: true, ocean: true, space: true, jungle: true, snow: true, night: true,
 };
+const MODES: Record<PlayMode, true> = { explore: true, 'find-letters': true, 'find-numbers': true, spell: true };
+const LAYOUTS: Record<Layout, true> = { focus: true, keyboard: true };
+/** v1 world ids that were renamed or replaced in v2. */
+const LEGACY_WORLDS: Record<string, WorldId> = { party: 'paper', bubbles: 'snow', dino: 'jungle' };
+/** v1 intensity names. */
+const LEGACY_INTENSITY: Record<string, Intensity> = { wild: 'lively' };
 const SPEECH_MODES: Record<SpeechMode, true> = { off: true, letter: true, word: true };
 const LETTER_CASES: Record<LetterCase, true> = { upper: true, lower: true, both: true };
 const SIZES: Record<SizeLevel, true> = { normal: true, big: true, huge: true };
-const INTENSITIES: Record<Intensity, true> = { calm: true, normal: true, wild: true };
+const INTENSITIES: Record<Intensity, true> = { calm: true, normal: true, lively: true };
 const MOTIONS: Record<MotionPref, true> = { system: true, reduce: true, full: true };
 
 const SETTINGS_KEYS = Object.keys(DEFAULT_SETTINGS) as Array<keyof Settings>;
@@ -66,6 +75,11 @@ function pickEnum<T extends string>(value: unknown, allowed: Record<T, true>, fa
   return typeof value === 'string' && Object.prototype.hasOwnProperty.call(allowed, value)
     ? (value as T)
     : fallback;
+}
+
+/** Maps a legacy (v1) enum value to its v2 replacement; other values pass through. */
+function migrate(value: unknown, legacy: Record<string, string>): unknown {
+  return typeof value === 'string' && Object.prototype.hasOwnProperty.call(legacy, value) ? legacy[value] : value;
 }
 
 function pickBool(value: unknown, fallback: boolean): boolean {
@@ -134,7 +148,9 @@ export function sanitizeSettings(raw: unknown, fallback: Settings = DEFAULT_SETT
     }
   };
   return {
-    world: pickEnum(get('world'), WORLD_IDS, d.world),
+    world: pickEnum(migrate(get('world'), LEGACY_WORLDS), WORLD_IDS, d.world),
+    mode: pickEnum(get('mode'), MODES, d.mode),
+    layout: pickEnum(get('layout'), LAYOUTS, d.layout),
     autoRotate: pickBool(get('autoRotate'), d.autoRotate),
     rotateMinutes: pickNumber(get('rotateMinutes'), 1, 30, d.rotateMinutes, true),
     volume: pickNumber(get('volume'), 0, 1, d.volume, false),
@@ -145,11 +161,10 @@ export function sanitizeSettings(raw: unknown, fallback: Settings = DEFAULT_SETT
     letterCase: pickEnum(get('letterCase'), LETTER_CASES, d.letterCase),
     pictures: pickBool(get('pictures'), d.pictures),
     size: pickEnum(get('size'), SIZES, d.size),
-    intensity: pickEnum(get('intensity'), INTENSITIES, d.intensity),
+    intensity: pickEnum(migrate(get('intensity'), LEGACY_INTENSITY), INTENSITIES, d.intensity),
     motion: pickEnum(get('motion'), MOTIONS, d.motion),
     trails: pickBool(get('trails'), d.trails),
     faces: pickBool(get('faces'), d.faces),
-    spatialKeys: pickBool(get('spatialKeys'), d.spatialKeys),
     childName: sanitizeChildName(get('childName'), d.childName),
     sessionMinutes: pickNumber(get('sessionMinutes'), 0, 120, d.sessionMinutes, true),
     secretWord: sanitizeSecretWord(get('secretWord'), d.secretWord),
