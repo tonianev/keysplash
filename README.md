@@ -2,6 +2,9 @@
 
 **A calm, educational keyboard toy for babies and toddlers. No ads, works offline.**
 
+**Play it:** <https://tonianev.com/keysplash/> — in Chrome or Edge, use *Install* in the
+address bar to get the cleanest fullscreen (and it then works fully offline).
+
 You're working from home and your little one wants the laptop too. Open
 KeySplash, press Start and hand it over. Every key teaches one thing: a big
 flashcard with the letter, a picture and the word ("bee… bee is for ball"), a
@@ -122,8 +125,9 @@ behaviour and safety rules.
 ## Deploying
 
 `npm run build` produces a static site in `dist/` that works from any static
-host or sub-path. A GitHub Pages workflow is included in
-`.github/workflows/deploy.yml`.
+host or sub-path. Every push to `main` runs the tests, builds and deploys to
+GitHub Pages via `.github/workflows/deploy.yml` (live at
+<https://tonianev.com/keysplash/>).
 
 ## Credits
 
