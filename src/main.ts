@@ -5,8 +5,8 @@
  * Everything is bundled (fonts included); the service worker precaches the
  * build so KeySplash runs offline after the first visit.
  */
-import '@fontsource/andika/400.css';
-import '@fontsource/andika/700.css';
+import '@fontsource/andika/latin-400.css';
+import '@fontsource/andika/latin-700.css';
 import './styles.css';
 import { registerSW } from 'virtual:pwa-register';
 import { WebAudioEngine } from './audio/engine';
