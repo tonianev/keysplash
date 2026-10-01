@@ -12,8 +12,10 @@ export default defineConfig({
   plugins: [
     VitePWA({
       registerType: 'autoUpdate',
-      injectRegister: false, // registered manually in src/main.ts
-      includeAssets: ['favicon.svg', 'apple-touch-icon-180x180.png'],
+      injectRegister: false, // registered manually in src/main.ts (reload deferred until idle)
+      // workbox.globPatterns already precaches every svg/png in public/ (icons included),
+      // so don't list them a second time.
+      includeManifestIcons: false,
       manifest: {
         name: 'KeySplash',
         short_name: 'KeySplash',

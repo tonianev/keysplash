@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>KeySplash art preview</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #17171d;
+        --panel: #22222b;
+        --text: #e9e9f0;
+        --muted: #9a9aab;
+        --warn: #ffb35c;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        padding: 16px;
+        background: var(--bg);
+        color: var(--text);
+        font: 14px/1.4 system-ui, -apple-system, 'Segoe UI', sans-serif;
+      }
+      header { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 24px; margin-bottom: 16px; }
+      h1 { font-size: 18px; margin: 0; }
+      h2 { font-size: 15px; margin: 24px 0 8px; color: var(--muted); font-weight: 600; }
+      label { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); }
+      .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; }
+      figure { margin: 0; background: var(--panel); border-radius: 10px; overflow: hidden; cursor: zoom-in; }
+      figure.big { grid-column: 1 / -1; cursor: zoom-out; }
+      figure canvas { display: block; width: 100%; aspect-ratio: 16 / 10; }
+      figure.big canvas { aspect-ratio: 16 / 9; }
+      figcaption { display: flex; justify-content: space-between; gap: 8px; padding: 6px 10px; color: var(--muted); }
+      figcaption b { color: var(--text); font-weight: 600; }
+      .cost.over { color: var(--warn); }
+      .shapes { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-start; }
+      .shapes canvas { display: block; border-radius: 10px; max-width: 100%; }
+      .hint { color: var(--muted); margin: 4px 0 0; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>KeySplash art preview <span class="hint">(dev only)</span></h1>
+      <label><input type="checkbox" id="reduce-motion" /> Reduce motion</label>
+      <label>Calm <input type="range" id="calm" min="0" max="1" step="0.05" value="0" /> <span id="calm-value">0</span></label>
+      <label><input type="checkbox" id="paused" /> Pause</label>
+    </header>
+
+    <h2>Backdrops <span class="hint">— click a tile to enlarge; ms = update + draw CPU time (budget 1.5 ms at full screen)</span></h2>
+    <div class="tiles" id="tiles"></div>
+
+    <h2>Shapes</h2>
+    <header>
+      <label>World <select id="world"></select></label>
+      <label><input type="checkbox" id="faces" checked /> Faces</label>
+    </header>
+    <div class="shapes">
+      <canvas id="shape-grid"></canvas>
+      <canvas id="shape-big"></canvas>
+    </div>
+
+    <script type="module" src="./art-preview.ts"></script>
+  </body>
+</html>

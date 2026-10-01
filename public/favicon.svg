@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <title>KeySplash</title>
+  <rect x="5" y="13" width="50" height="48" rx="13" fill="#bf3851"/>
+  <rect x="8" y="10" width="44" height="42" rx="11" fill="#ff6b6b"/>
+  <path d="M22 20V41M36.5 20 24.5 31M28.5 28.5 37.5 41" fill="none" stroke="#ffffff" stroke-width="6.5"
+        stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M52 2.5L54.6 8.4L61 9.1L56.2 13.4L57.6 19.7L52 16.4L46.4 19.7L47.8 13.4L43 9.1L49.4 8.4Z"
+        fill="#ffd166" stroke="#0b1026" stroke-width="2" stroke-linejoin="round"/>
+</svg>

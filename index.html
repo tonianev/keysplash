@@ -4,14 +4,27 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
     <meta name="theme-color" content="#0b1026" />
+    <meta name="color-scheme" content="dark" />
     <meta name="description" content="A fullscreen, ad-free, offline keyboard smash toy for babies and toddlers." />
+    <meta name="format-detection" content="telephone=no" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="KeySplash" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="./apple-touch-icon-180x180.png" />
     <title>KeySplash</title>
+    <!-- Paint the night sky before the bundle loads (no white flash). -->
+    <style>html,body{margin:0;height:100%;background:#0b1026;overflow:hidden}</style>
   </head>
   <body>
     <canvas id="stage"></canvas>
     <div id="ui"></div>
+    <noscript>
+      <p style="position:fixed;top:0;right:0;bottom:0;left:0;margin:0;display:grid;place-items:center;padding:24px;text-align:center;color:#f5f7ff;font:600 20px/1.4 system-ui,sans-serif">
+        KeySplash needs JavaScript to play. Please turn it on and reload.
+      </p>
+    </noscript>
     <script type="module" src="./src/main.ts"></script>
   </body>
 </html>

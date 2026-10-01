@@ -297,6 +297,12 @@ export interface AudioEngine {
   setVolume(volume: number): void; // 0..1
   setMuted(muted: boolean): void;
   setTimbre(timbre: Timbre): void;
+  /**
+   * Key the melodic effects (sparkle, twinkle, chime, tada) to the world's
+   * major pentatonic scale rooted at `rootMidi`, so they never clash with key
+   * notes. Only the pitch class matters (effects keep their own register).
+   */
+  setRoot(rootMidi: number): void;
   /** Play a MIDI note with the current timbre. */
   note(midi: number, options?: NoteOptions): void;
   /** Play notes as a quick rising arpeggio (smash, rainbow…). */
@@ -310,6 +316,12 @@ export interface VoiceInfo {
   uri: string;
   name: string;
   lang: string;
+  /**
+   * True for on-device voices. False for network voices (e.g. Chrome's
+   * "Google …", Edge's "… Online (Natural)"), which send the text to a server
+   * and fail offline.
+   */
+  local: boolean;
 }
 
 export interface Speaker {
@@ -476,6 +488,8 @@ export interface StartScreenDeps {
   worlds: World[];
   /** Called from the user gesture (click/tap/key) that starts play. */
   onStart(): void;
+  /** Optional: open the grown-up panel from the start screen (a small settings link). */
+  onOpenControls?(): void;
 }
 
 export interface StartScreen {

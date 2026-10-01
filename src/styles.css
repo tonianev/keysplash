@@ -1,0 +1,1591 @@
+/* ==========================================================================
+   KeySplash — global styles and the DOM overlays (start screen, grown-up
+   panel, All done / resume screens, corner ring, toast).
+   Night-sky base with candy accents; the canvas world shows through the
+   translucent overlays.
+   ========================================================================== */
+
+:root {
+  --ks-night: #0b1026;
+  --ks-night-2: #141b3d;
+  --ks-ink: #f5f7ff;
+  --ks-ink-soft: rgba(236, 240, 255, 0.76);
+  --ks-ink-faint: rgba(236, 240, 255, 0.56);
+  --ks-line: rgba(255, 255, 255, 0.12);
+
+  --ks-coral: #ff6b6b;
+  --ks-sun: #ffd166;
+  --ks-mint: #06d6a0;
+  --ks-sky: #4cc9f0;
+  --ks-grape: #9b5de5;
+
+  --ks-font: "Fredoka", ui-rounded, "SF Pro Rounded", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --ks-font-ui: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+
+  --ks-safe-t: env(safe-area-inset-top, 0px);
+  --ks-safe-r: env(safe-area-inset-right, 0px);
+  --ks-safe-b: env(safe-area-inset-bottom, 0px);
+  --ks-safe-l: env(safe-area-inset-left, 0px);
+
+  --ks-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ks-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ks-fade: 0.28s; /* keep in sync with FADE_MS in src/ui/*.ts */
+
+  /* A chunky sunshine star with a dark rim, readable on light and dark worlds. Hotspot = centre. */
+  --ks-cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 40 40'%3E%3Cpath d='M20 4L24.3 14L35.2 15.1L27 22.3L29.4 32.9L20 27.4L10.6 32.9L13 22.3L4.8 15.1L15.7 14Z' fill='%230b1026' stroke='%230b1026' stroke-width='5' stroke-linejoin='round'/%3E%3Cpath d='M20 4L24.3 14L35.2 15.1L27 22.3L29.4 32.9L20 27.4L10.6 32.9L13 22.3L4.8 15.1L15.7 14Z' fill='%23ffd166' stroke='%23ffffff' stroke-width='2.2' stroke-linejoin='round'/%3E%3C/svg%3E") 20 20, pointer;
+
+  color-scheme: dark;
+}
+
+/* --- Reset ------------------------------------------------------------- */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--ks-night);
+  color: var(--ks-ink);
+  font-family: var(--ks-font);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: none;
+}
+
+body {
+  position: fixed; /* no rubber-banding on iOS */
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+}
+
+h1, h2, h3, p, ul, ol, dl, dd, figure {
+  margin: 0;
+}
+
+ul, ol {
+  padding: 0;
+  list-style: none;
+}
+
+button, input, select, textarea {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+svg {
+  display: block;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+:focus-visible {
+  outline: 3px solid var(--ks-sun);
+  outline-offset: 3px;
+}
+
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+.ks-sr {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* --- Stage + overlay root -------------------------------------------- */
+
+canvas#stage {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  display: block;
+  touch-action: none;
+  cursor: var(--ks-cursor);
+}
+
+#ui {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 1;
+  pointer-events: none;
+}
+
+/* Zero specificity so each component can opt back out (toast, corner ring). */
+:where(#ui) > * {
+  pointer-events: auto;
+}
+
+/* Grown-up inputs (the parent panel) may select and edit text. */
+[data-allow-keys] input,
+[data-allow-keys] textarea,
+[data-allow-keys] select {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+/* Shared fade for full-screen layers; JS toggles .is-shown and `hidden`. */
+.ks-start,
+.ks-panel,
+.ks-alldone,
+.ks-resume {
+  pointer-events: auto; /* explicit too, for engines without :where() */
+  opacity: 0;
+  transition: opacity var(--ks-fade) var(--ks-ease);
+}
+
+.ks-start.is-shown,
+.ks-panel.is-shown,
+.ks-alldone.is-shown,
+.ks-resume.is-shown {
+  opacity: 1;
+}
+
+/* While fading out, let taps fall through to the canvas right away. */
+.ks-start:not(.is-shown),
+.ks-panel:not(.is-shown),
+.ks-alldone:not(.is-shown),
+.ks-resume:not(.is-shown) {
+  pointer-events: none;
+}
+
+/* ==========================================================================
+   Start screen
+   ========================================================================== */
+
+.ks-start {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding:
+    max(16px, var(--ks-safe-t))
+    max(16px, var(--ks-safe-r))
+    max(14px, var(--ks-safe-b))
+    max(16px, var(--ks-safe-l));
+  text-align: center;
+  overflow: hidden;
+  touch-action: none;
+  cursor: var(--ks-cursor);
+  background:
+    radial-gradient(ellipse 70% 60% at 50% 42%, rgba(11, 16, 38, 0.2), rgba(11, 16, 38, 0.82) 100%),
+    rgba(11, 16, 38, 0.3);
+  -webkit-backdrop-filter: blur(6px) saturate(1.15);
+  backdrop-filter: blur(6px) saturate(1.15);
+}
+
+.ks-start__main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(8px, 1.8vmin, 16px);
+  min-height: 0;
+}
+
+.ks-start__greeting {
+  font-weight: 600;
+  font-size: clamp(22px, 4.4vmin, 40px);
+  line-height: 1.1;
+  color: var(--ks-sun);
+  padding: 0.2em 0.8em 0.25em;
+  border-radius: 999px;
+  background: rgba(255, 209, 102, 0.12);
+  border: 2px solid rgba(255, 209, 102, 0.35);
+  animation: ks-pop-in 0.6s var(--ks-spring) both;
+}
+
+.ks-title {
+  display: flex;
+  font-weight: 700;
+  font-size: clamp(54px, 13vmin, 136px);
+  line-height: 1;
+  letter-spacing: 0.01em;
+}
+
+.ks-title__letter {
+  display: inline-block;
+  color: var(--c);
+  text-shadow: 0 0.06em 0 rgba(0, 0, 0, 0.28);
+  text-shadow:
+    0 0.06em 0 rgba(0, 0, 0, 0.28),
+    0 0 0.45em color-mix(in srgb, var(--c) 45%, transparent);
+  transform-origin: 50% 100%;
+  animation: ks-bounce 2.6s var(--ks-ease) infinite;
+  animation-delay: calc(var(--i, 0) * 110ms);
+}
+
+.ks-title__letter:nth-child(5n + 1) { --c: var(--ks-coral); }
+.ks-title__letter:nth-child(5n + 2) { --c: var(--ks-sun); }
+.ks-title__letter:nth-child(5n + 3) { --c: var(--ks-mint); }
+.ks-title__letter:nth-child(5n + 4) { --c: var(--ks-sky); }
+.ks-title__letter:nth-child(5n + 5) { --c: var(--ks-grape); }
+
+.ks-start__subtitle {
+  max-width: 34ch;
+  font-weight: 500;
+  font-size: clamp(16px, 2.5vmin, 22px);
+  line-height: 1.3;
+  color: var(--ks-ink-soft);
+}
+
+.ks-play {
+  --size: clamp(116px, 24vmin, 168px);
+  position: relative;
+  width: var(--size);
+  height: var(--size);
+  margin-top: clamp(8px, 2.4vmin, 22px);
+  border: 0;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  background: radial-gradient(circle at 34% 28%, #ffa494 0%, var(--ks-coral) 46%, #e8506b 100%);
+  box-shadow: 0 0.5rem 0 #b93a55, 0 1.3rem 2.4rem rgba(0, 0, 0, 0.38), 0 0 0 0 rgba(255, 107, 107, 0.5);
+  transition: transform 0.18s var(--ks-spring);
+  /* Gentle breathing plus a glow ring pulsing outwards. */
+  animation:
+    ks-breathe 2.4s ease-in-out infinite,
+    ks-glow 2.4s ease-out infinite;
+}
+
+.ks-play svg {
+  width: 46%;
+  height: 46%;
+  margin-left: 6%;
+  filter: drop-shadow(0 3px 0 rgba(0, 0, 0, 0.16));
+}
+
+.ks-play:hover {
+  transform: scale(1.05);
+}
+
+.ks-play:active {
+  transform: translateY(0.3rem) scale(0.97);
+}
+
+.ks-play:focus-visible {
+  outline: 4px solid #fff;
+  outline-offset: 6px;
+}
+
+.ks-start__hint {
+  margin-top: 0.35rem;
+  font-weight: 500;
+  font-size: clamp(14px, 2.1vmin, 18px);
+  color: var(--ks-ink-faint);
+}
+
+.ks-worlds {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: clamp(6px, 1.2vmin, 10px);
+  margin-top: clamp(10px, 3vmin, 28px);
+  padding: 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--ks-line);
+  cursor: default;
+}
+
+.ks-world {
+  width: clamp(48px, 8vmin, 62px);
+  height: clamp(48px, 8vmin, 62px);
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: rgba(255, 255, 255, 0.07);
+  font-size: clamp(24px, 4.2vmin, 32px);
+  line-height: 1;
+  transition: transform 0.22s var(--ks-spring), background 0.2s, box-shadow 0.2s;
+}
+
+.ks-world:hover {
+  background: rgba(255, 255, 255, 0.14);
+  transform: translateY(-2px);
+}
+
+.ks-world.is-selected {
+  background: rgba(255, 209, 102, 0.2);
+  box-shadow: 0 0 0 3px var(--ks-sun), 0 6px 18px rgba(255, 209, 102, 0.3);
+  transform: scale(1.08);
+}
+
+@media (max-width: 560px) {
+  .ks-worlds { border-radius: 28px; }
+}
+
+.ks-start__world {
+  min-height: 1.3em;
+  font-weight: 500;
+  font-size: clamp(13px, 1.9vmin, 16px);
+  color: var(--ks-ink-faint);
+  cursor: default;
+}
+
+.ks-start__foot {
+  max-width: 820px;
+  display: grid;
+  gap: 6px;
+  font-size: clamp(12px, 1.7vmin, 14px);
+  line-height: 1.4;
+  color: var(--ks-ink-faint);
+  cursor: default;
+}
+
+.ks-start__how {
+  color: var(--ks-ink-soft);
+}
+
+.ks-start__secret {
+  font-weight: 600;
+  color: var(--ks-sun);
+  padding: 0 0.35em;
+  border-radius: 6px;
+  background: rgba(255, 209, 102, 0.12);
+}
+
+.ks-start__controls {
+  justify-self: center;
+  min-height: 32px;
+  padding: 0 14px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ks-ink-soft);
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.16s, color 0.16s;
+}
+
+.ks-start__controls:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--ks-ink);
+}
+
+.ks-tips {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 2px 18px;
+}
+
+.ks-tips li::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin: 0 7px 2px 0;
+  border-radius: 50%;
+  background: var(--ks-mint);
+}
+
+.ks-tips li:nth-child(2)::before { background: var(--ks-sky); }
+.ks-tips li:nth-child(3)::before { background: var(--ks-grape); }
+
+@media (max-height: 600px) {
+  .ks-tips { display: none; }
+}
+
+@media (max-height: 460px) {
+  .ks-start__subtitle,
+  .ks-start__world { display: none; }
+  .ks-worlds { margin-top: 4px; }
+}
+
+/* ==========================================================================
+   Grown-up panel
+   ========================================================================== */
+
+.ks-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding:
+    max(12px, var(--ks-safe-t))
+    max(12px, var(--ks-safe-r))
+    max(12px, var(--ks-safe-b))
+    max(12px, var(--ks-safe-l));
+  font-family: var(--ks-font-ui);
+  background: rgba(5, 8, 22, 0.55);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+}
+
+.ks-panel__card {
+  width: min(720px, 100%);
+  max-height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 28px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: linear-gradient(180deg, rgba(30, 38, 84, 0.94), rgba(17, 23, 54, 0.96));
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  transform: translateY(14px) scale(0.98);
+  transition: transform 0.32s var(--ks-spring);
+}
+
+.ks-panel.is-shown .ks-panel__card {
+  transform: none;
+}
+
+.ks-panel__card:focus {
+  outline: none;
+}
+
+.ks-panel__head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 16px 14px 20px;
+  border-bottom: 1px solid var(--ks-line);
+}
+
+.ks-panel__logo svg {
+  width: 40px;
+  height: 40px;
+}
+
+.ks-panel__titles {
+  flex: 1;
+  min-width: 0;
+}
+
+.ks-panel__title {
+  font-family: var(--ks-font);
+  font-weight: 600;
+  font-size: 22px;
+  line-height: 1.15;
+}
+
+.ks-panel__subtitle {
+  font-size: 13px;
+  color: var(--ks-ink-soft);
+}
+
+.ks-iconbtn {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: rgba(255, 255, 255, 0.08);
+  font-size: 17px;
+  transition: background 0.15s;
+}
+
+.ks-iconbtn:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.ks-panel__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+  display: grid;
+  gap: 14px;
+  padding: 14px 16px 18px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.25) transparent;
+}
+
+.ks-panel__foot {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 14px 16px;
+  border-top: 1px solid var(--ks-line);
+  background: rgba(8, 12, 32, 0.45);
+}
+
+.ks-panel__install {
+  margin-right: auto;
+}
+
+/* --- Sections + rows --- */
+
+.ks-sec {
+  padding: 14px 16px 4px;
+  border-radius: 20px;
+  border: 1px solid var(--ks-line);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.ks-sec__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  font-family: var(--ks-font);
+  font-weight: 600;
+  font-size: 18px;
+}
+
+.ks-sec__icon {
+  font-size: 20px;
+}
+
+.ks-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+  padding: 11px 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.ks-sec__title + .ks-row {
+  border-top: 0;
+}
+
+.ks-row--end {
+  justify-content: flex-end;
+}
+
+.ks-row__text {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.ks-row__label {
+  font-weight: 600;
+  font-size: 15px;
+}
+
+.ks-row__desc {
+  margin-top: 2px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--ks-ink-soft);
+}
+
+.ks-row__control {
+  flex: 0 1 auto;
+  max-width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ks-row.is-disabled .ks-row__text {
+  opacity: 0.5;
+}
+
+/* --- Switch (checkbox role="switch") --- */
+
+.ks-switch {
+  position: relative;
+  flex: none;
+  display: inline-block;
+  width: 56px;
+  height: 34px;
+}
+
+.ks-switch input {
+  position: absolute;
+  top: -6px; /* ≥ 44 px touch target */
+  left: -6px;
+  z-index: 1;
+  width: calc(100% + 12px);
+  height: calc(100% + 12px);
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.ks-switch__track {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.2);
+  transition: background 0.2s var(--ks-ease);
+}
+
+.ks-switch__track::after {
+  content: "";
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+  transition: transform 0.24s var(--ks-spring);
+}
+
+.ks-switch input:checked + .ks-switch__track {
+  background: var(--ks-mint);
+}
+
+.ks-switch input:checked + .ks-switch__track::after {
+  transform: translateX(22px);
+}
+
+.ks-switch input:focus-visible + .ks-switch__track {
+  outline: 3px solid var(--ks-sun);
+  outline-offset: 3px;
+}
+
+/* --- Segmented pill group (radios) --- */
+
+.ks-seg {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 4px;
+  border-radius: 999px;
+  border: 1px solid var(--ks-line);
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.ks-seg__opt {
+  position: relative;
+}
+
+.ks-seg__opt input,
+.ks-card input {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.ks-seg__text {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 66px;
+  min-height: 40px;
+  padding: 0 14px;
+  border-radius: 999px;
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--ks-ink-soft);
+  transition: background 0.18s, color 0.18s;
+}
+
+.ks-seg__opt:hover .ks-seg__text {
+  color: var(--ks-ink);
+}
+
+.ks-seg__opt input:checked + .ks-seg__text {
+  background: var(--ks-ink);
+  color: var(--ks-night);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.ks-seg__opt input:focus-visible + .ks-seg__text {
+  outline: 3px solid var(--ks-sun);
+  outline-offset: 2px;
+}
+
+/* --- World cards --- */
+
+.ks-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+  gap: 10px;
+  margin: 4px 0 10px;
+}
+
+.ks-card {
+  position: relative;
+}
+
+.ks-card__face {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 14px 8px 12px;
+  border-radius: 16px;
+  border: 2px solid transparent;
+  background: rgba(255, 255, 255, 0.06);
+  transition: background 0.18s, border-color 0.18s, transform 0.2s var(--ks-spring);
+}
+
+.ks-card__icon {
+  font-size: 34px;
+  line-height: 1;
+}
+
+.ks-card__label {
+  font-size: 13px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.ks-card:hover .ks-card__face {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.ks-card input:checked + .ks-card__face {
+  border-color: var(--ks-sun);
+  background: rgba(255, 209, 102, 0.14);
+}
+
+.ks-card input:focus-visible + .ks-card__face {
+  outline: 3px solid var(--ks-sun);
+  outline-offset: 2px;
+}
+
+/* --- Text inputs, selects, range --- */
+
+.ks-input,
+.ks-select {
+  width: 230px;
+  max-width: 100%;
+  min-height: 44px;
+  padding: 0 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background-color: rgba(4, 7, 22, 0.45);
+  font-size: 15px;
+  color: var(--ks-ink);
+}
+
+.ks-input::placeholder {
+  color: var(--ks-ink-faint);
+}
+
+.ks-input:focus-visible,
+.ks-select:focus-visible {
+  outline: 3px solid var(--ks-sun);
+  outline-offset: 1px;
+  border-color: transparent;
+}
+
+.ks-input[aria-invalid="true"] {
+  border-color: var(--ks-coral);
+}
+
+.ks-input--number {
+  width: 84px;
+  text-align: center;
+}
+
+.ks-input:disabled {
+  opacity: 0.5;
+}
+
+.ks-select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 38px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='9' viewBox='0 0 14 9'%3E%3Cpath d='M1.5 1.5 7 7l5.5-5.5' fill='none' stroke='%23f5f7ff' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.ks-select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.ks-select option {
+  background: var(--ks-night-2);
+  color: var(--ks-ink);
+}
+
+.ks-unit {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ks-ink-soft);
+}
+
+.ks-range {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 270px;
+  max-width: 100%;
+}
+
+.ks-range.is-muted {
+  opacity: 0.5;
+}
+
+.ks-range input {
+  flex: 1;
+  min-width: 0;
+  height: 44px;
+  margin: 0;
+  background: transparent;
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+}
+
+.ks-range input::-webkit-slider-runnable-track {
+  height: 10px;
+  border-radius: 999px;
+  background:
+    linear-gradient(90deg, var(--ks-sky), var(--ks-mint)) 0 0 / var(--fill, 50%) 100% no-repeat,
+    rgba(255, 255, 255, 0.18);
+}
+
+.ks-range input::-moz-range-track {
+  height: 10px;
+  border-radius: 999px;
+  background:
+    linear-gradient(90deg, var(--ks-sky), var(--ks-mint)) 0 0 / var(--fill, 50%) 100% no-repeat,
+    rgba(255, 255, 255, 0.18);
+}
+
+.ks-range input::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 28px;
+  height: 28px;
+  margin-top: -9px;
+  border: 0;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+.ks-range input::-moz-range-thumb {
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+.ks-range input:focus-visible {
+  outline: none;
+}
+
+.ks-range input:focus-visible::-webkit-slider-thumb {
+  box-shadow: 0 0 0 4px var(--ks-sun), 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+.ks-range input:focus-visible::-moz-range-thumb {
+  box-shadow: 0 0 0 4px var(--ks-sun), 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+.ks-range__value {
+  min-width: 3.2em;
+  text-align: right;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- Secret word field --- */
+
+.ks-field__line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.ks-field__saved {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ks-mint);
+  white-space: nowrap;
+}
+
+.ks-field__error {
+  max-width: 260px;
+  margin-top: 6px;
+  font-size: 13px;
+  line-height: 1.35;
+  color: #ffa3a3;
+}
+
+/* --- Buttons --- */
+
+.ks-btn {
+  min-height: 46px;
+  padding: 0 20px;
+  border: 0;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-family: var(--ks-font);
+  font-weight: 600;
+  font-size: 16px;
+  white-space: nowrap;
+  transition: transform 0.16s var(--ks-spring), background 0.16s, box-shadow 0.16s;
+}
+
+.ks-btn:active {
+  transform: scale(0.97);
+}
+
+.ks-btn--primary {
+  color: #3b2500;
+  background: linear-gradient(180deg, #ffe39a, var(--ks-sun));
+  box-shadow: 0 4px 0 #d9a53b, 0 10px 22px rgba(255, 209, 102, 0.22);
+}
+
+.ks-btn--primary:active {
+  box-shadow: 0 1px 0 #d9a53b, 0 4px 12px rgba(255, 209, 102, 0.2);
+}
+
+.ks-btn--secondary {
+  color: var(--ks-ink);
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.ks-btn--secondary:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.ks-btn--ghost {
+  color: var(--ks-ink);
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+}
+
+.ks-btn--ghost:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+/* --- Lock status --- */
+
+.ks-statusbox {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.ks-statuses {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ks-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.07);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ks-ink-soft);
+}
+
+.ks-status__dot {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.ks-status__note {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--ks-ink-faint);
+}
+
+.ks-status[data-on="true"] {
+  color: #c4f7e6;
+  background: rgba(6, 214, 160, 0.14);
+}
+
+.ks-status[data-on="true"] .ks-status__dot {
+  background: var(--ks-mint);
+  box-shadow: 0 0 0 3px rgba(6, 214, 160, 0.25);
+}
+
+.ks-note {
+  margin: 2px 0 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(76, 201, 240, 0.22);
+  background: rgba(76, 201, 240, 0.08);
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--ks-ink-soft);
+}
+
+/* --- Session stats --- */
+
+.ks-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin: 6px 0 14px;
+}
+
+.ks-stat {
+  display: flex;
+  flex-direction: column-reverse; /* big number above its label */
+  justify-content: flex-end;
+  gap: 2px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.ks-stat__value {
+  font-family: var(--ks-font);
+  font-weight: 700;
+  font-size: 26px;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.ks-stat:nth-child(1) .ks-stat__value { color: var(--ks-coral); }
+.ks-stat:nth-child(2) .ks-stat__value { color: var(--ks-sun); }
+.ks-stat:nth-child(3) .ks-stat__value { color: var(--ks-mint); }
+.ks-stat:nth-child(4) .ks-stat__value { color: var(--ks-sky); }
+
+.ks-stat__label {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ks-ink-soft);
+}
+
+.ks-topkeys__title {
+  margin-bottom: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ks-ink-soft);
+}
+
+.ks-topkeys {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.ks-topkey {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 14px 5px 5px;
+  border-radius: 999px;
+  background: var(--c);
+  color: #1d1236;
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.ks-topkey--0 { --c: var(--ks-coral); }
+.ks-topkey--1 { --c: var(--ks-sun); }
+.ks-topkey--2 { --c: var(--ks-mint); }
+.ks-topkey--3 { --c: var(--ks-sky); }
+.ks-topkey--4 { --c: var(--ks-grape); }
+
+/* Each favourite key is a tiny keycap. */
+.ks-topkey__key {
+  min-width: 34px;
+  height: 34px;
+  padding: 0 8px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.78);
+  box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.14);
+  font-family: var(--ks-font);
+  font-size: 17px;
+}
+
+.ks-topkeys__empty {
+  font-size: 14px;
+  color: var(--ks-ink-faint);
+}
+
+@media (max-width: 560px) {
+  .ks-panel__card { border-radius: 22px; }
+  .ks-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ks-input, .ks-select { width: 100%; }
+  .ks-row__control { flex-basis: 100%; }
+  .ks-panel__foot .ks-btn { flex: 1 1 auto; }
+  .ks-panel__install { margin-right: 0; flex-basis: 100% !important; }
+}
+
+/* ==========================================================================
+   All done (session over)
+   ========================================================================== */
+
+.ks-alldone {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding:
+    max(24px, var(--ks-safe-t))
+    max(16px, var(--ks-safe-r))
+    max(96px, calc(var(--ks-safe-b) + 84px))
+    max(16px, var(--ks-safe-l));
+  text-align: center;
+  overflow: hidden;
+  touch-action: none;
+  cursor: var(--ks-cursor);
+  background: radial-gradient(ellipse 80% 70% at 50% 40%, rgba(38, 46, 108, 0.9), rgba(8, 11, 30, 0.97) 75%);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+}
+
+/* A slower, sleepier fade in. */
+.ks-alldone.is-shown {
+  transition-duration: 0.9s;
+}
+
+.ks-alldone__sky {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  pointer-events: none;
+  background-image:
+    radial-gradient(2px 2px at 12% 18%, #fff 50%, transparent 52%),
+    radial-gradient(1.5px 1.5px at 26% 72%, #fff 50%, transparent 52%),
+    radial-gradient(2px 2px at 38% 30%, #fff 50%, transparent 52%),
+    radial-gradient(1.5px 1.5px at 64% 14%, #fff 50%, transparent 52%),
+    radial-gradient(2px 2px at 78% 62%, #fff 50%, transparent 52%),
+    radial-gradient(1.5px 1.5px at 88% 26%, #fff 50%, transparent 52%),
+    radial-gradient(2px 2px at 8% 86%, #fff 50%, transparent 52%),
+    radial-gradient(1.5px 1.5px at 56% 88%, #fff 50%, transparent 52%),
+    radial-gradient(2px 2px at 94% 82%, #fff 50%, transparent 52%);
+  opacity: 0.7;
+  animation: ks-twinkle 5s ease-in-out infinite alternate;
+}
+
+.ks-alldone__card {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: clamp(6px, 1.6vmin, 14px);
+}
+
+.ks-alldone__moon {
+  position: relative;
+  font-size: clamp(96px, 22vmin, 180px);
+  line-height: 1;
+  margin-bottom: 0.08em;
+  animation: ks-rock 6s ease-in-out infinite;
+}
+
+.ks-alldone__moon-glyph {
+  display: block;
+  filter: drop-shadow(0 0 0.25em rgba(255, 209, 102, 0.45));
+}
+
+/* "z z z" float up from the moon. Base positions double as the reduced-motion look. */
+.ks-z {
+  position: absolute;
+  font-family: var(--ks-font);
+  font-weight: 700;
+  line-height: 1;
+  color: var(--ks-sky);
+  opacity: 0.85;
+  animation: ks-z 4.5s ease-in-out infinite;
+}
+
+.ks-z--1 { top: 28%; right: -14%; font-size: 0.24em; }
+.ks-z--2 { top: 8%; right: -28%; font-size: 0.2em; animation-delay: 1.5s; }
+.ks-z--3 { top: -10%; right: -38%; font-size: 0.16em; animation-delay: 3s; }
+
+.ks-alldone__title {
+  font-family: var(--ks-font);
+  font-weight: 700;
+  font-size: clamp(50px, 11vmin, 108px);
+  line-height: 1;
+  color: var(--ks-sun);
+  text-shadow: 0 0.06em 0 rgba(0, 0, 0, 0.3), 0 0 0.5em rgba(255, 209, 102, 0.25);
+}
+
+.ks-alldone__sub {
+  font-weight: 500;
+  font-size: clamp(20px, 4vmin, 34px);
+  color: var(--ks-ink-soft);
+}
+
+.ks-hold {
+  position: absolute;
+  left: 50%;
+  bottom: max(20px, calc(var(--ks-safe-b) + 12px));
+  transform: translateX(-50%);
+  max-width: calc(100% - 32px);
+  min-height: 52px;
+  padding: 6px 18px 6px 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--ks-ink-soft);
+  font-family: var(--ks-font-ui);
+  font-size: 14px;
+  font-weight: 600;
+  text-align: left;
+  touch-action: none;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s, color 0.2s;
+}
+
+.ks-hold.is-holding {
+  color: var(--ks-ink);
+  border-color: rgba(255, 209, 102, 0.45);
+  background: rgba(255, 209, 102, 0.14);
+}
+
+.ks-hold__ring {
+  flex: none;
+  width: 40px;
+  height: 40px;
+}
+
+.ks-hold__track {
+  fill: rgba(255, 255, 255, 0.08);
+  stroke: rgba(255, 255, 255, 0.22);
+  stroke-width: 4;
+}
+
+.ks-hold__fill {
+  fill: none;
+  stroke: var(--ks-sun);
+  stroke-width: 4;
+  stroke-linecap: round;
+  stroke-dasharray: 113.1; /* 2π × r(18) */
+  stroke-dashoffset: 113.1;
+  opacity: 0;
+}
+
+/* The ring is the hold timer itself: it fills over exactly 3 s (ALL_DONE_HOLD_MS). */
+.ks-hold.is-holding .ks-hold__fill {
+  opacity: 1;
+  stroke-dashoffset: 0;
+  transition: stroke-dashoffset 3s linear;
+}
+
+.ks-hold__icon {
+  fill: var(--ks-ink);
+}
+
+/* ==========================================================================
+   Resume (fullscreen was lost)
+   ========================================================================== */
+
+.ks-resume {
+  --size: clamp(160px, 36vmin, 260px);
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 30;
+  display: grid;
+  place-items: center;
+  touch-action: none;
+  cursor: var(--ks-cursor);
+  background: rgba(11, 16, 38, 0.5);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+}
+
+.ks-resume:focus {
+  outline: none;
+}
+
+.ks-resume__play,
+.ks-resume__hand {
+  grid-area: 1 / 1;
+}
+
+.ks-resume__play {
+  width: var(--size);
+  height: var(--size);
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  background: radial-gradient(circle at 34% 28%, #8eeaff 0%, var(--ks-sky) 48%, #3a86ff 100%);
+  box-shadow: 0 0.7rem 0 #2a62c4, 0 1.6rem 3rem rgba(0, 0, 0, 0.42), 0 0 0 0.9rem rgba(76, 201, 240, 0.16);
+  animation: ks-breathe 1.8s ease-in-out infinite;
+}
+
+.ks-resume__play svg {
+  width: 48%;
+  height: 48%;
+  margin-left: 6%;
+  filter: drop-shadow(0 4px 0 rgba(0, 0, 0, 0.15));
+}
+
+.ks-resume__hand {
+  font-size: calc(var(--size) * 0.34);
+  line-height: 1;
+  transform: translate(calc(var(--size) * 0.38), calc(var(--size) * 0.42));
+  filter: drop-shadow(0 6px 10px rgba(0, 0, 0, 0.35));
+  animation: ks-tap 1.8s ease-in-out infinite;
+}
+
+/* ==========================================================================
+   Corner-hold ring + toast
+   ========================================================================== */
+
+.ks-corner {
+  position: fixed;
+  top: max(14px, var(--ks-safe-t));
+  left: max(14px, var(--ks-safe-l));
+  z-index: 35;
+  width: 88px;
+  height: 88px;
+  pointer-events: none;
+  opacity: 0;
+  transform: scale(0.6);
+  transition: opacity 0.2s var(--ks-ease), transform 0.25s var(--ks-spring);
+}
+
+.ks-corner.is-shown {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.ks-corner svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.ks-corner__bg {
+  fill: rgba(11, 16, 38, 0.66);
+  stroke: rgba(255, 255, 255, 0.24);
+  stroke-width: 5;
+}
+
+.ks-corner__fill {
+  fill: none;
+  stroke: var(--ks-sun);
+  stroke-width: 5;
+  stroke-linecap: round;
+  stroke-dashoffset: 163.36; /* 2π × r(26); dasharray is set on the element */
+}
+
+.ks-corner.is-full .ks-corner__fill {
+  stroke: var(--ks-mint);
+}
+
+.ks-corner__shackle {
+  fill: none;
+  stroke: #fff;
+  stroke-width: 3.5;
+  stroke-linecap: round;
+}
+
+.ks-corner__body {
+  fill: #fff;
+}
+
+.ks-toast {
+  position: fixed;
+  left: 50%;
+  bottom: max(24px, calc(var(--ks-safe-b) + 16px));
+  z-index: 50;
+  max-width: calc(100vw - 32px);
+  padding: 12px 20px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(20, 27, 61, 0.94);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+  color: var(--ks-ink);
+  font-family: var(--ks-font-ui);
+  font-size: 15px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+  opacity: 0;
+  transform: translate(-50%, 16px);
+  transition: opacity 0.25s var(--ks-ease), transform 0.3s var(--ks-spring);
+}
+
+.ks-toast.is-shown {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+/* ==========================================================================
+   No backdrop-filter: use more opaque layers so text stays readable.
+   ========================================================================== */
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .ks-start { background: rgba(11, 16, 38, 0.86); }
+  .ks-panel { background: rgba(5, 8, 22, 0.86); }
+  .ks-panel__card { background: #161d45; }
+  .ks-resume { background: rgba(11, 16, 38, 0.8); }
+  .ks-alldone { background: #0d1332; }
+}
+
+/* ==========================================================================
+   Keyframes
+   ========================================================================== */
+
+@keyframes ks-bounce {
+  0%, 55%, 100% { transform: translateY(0) scale(1, 1); }
+  18% { transform: translateY(-0.13em) scale(1.03, 0.98); }
+  32% { transform: translateY(0) scale(1.06, 0.93); }
+  42% { transform: translateY(-0.03em) scale(0.98, 1.02); }
+}
+
+@keyframes ks-breathe {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+}
+
+@keyframes ks-glow {
+  0% { box-shadow: 0 0.5rem 0 #b93a55, 0 1.3rem 2.4rem rgba(0, 0, 0, 0.38), 0 0 0 0 rgba(255, 107, 107, 0.55); }
+  100% { box-shadow: 0 0.5rem 0 #b93a55, 0 1.3rem 2.4rem rgba(0, 0, 0, 0.38), 0 0 0 1.6rem rgba(255, 107, 107, 0); }
+}
+
+@keyframes ks-pop-in {
+  0% { opacity: 0; transform: scale(0.6); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+@keyframes ks-rock {
+  0%, 100% { transform: rotate(-6deg) translateY(0); }
+  50% { transform: rotate(6deg) translateY(-0.04em); }
+}
+
+@keyframes ks-z {
+  0% { opacity: 0; transform: translate(-0.4em, 0.6em) scale(0.6); }
+  25% { opacity: 1; }
+  100% { opacity: 0; transform: translate(0.5em, -1.1em) scale(1.15) rotate(10deg); }
+}
+
+@keyframes ks-twinkle {
+  from { opacity: 0.45; }
+  to { opacity: 0.85; }
+}
+
+@keyframes ks-tap {
+  0%, 100% { translate: 0 0; }
+  45% { translate: -6% -8%; }
+  60% { translate: 0 0; }
+}
+
+/* ==========================================================================
+   Reduced motion: the OS preference (unless the parent chose "Full" motion)
+   or the parent's "Reduce" choice. data-motion is set from settings by the
+   start screen.
+   ========================================================================== */
+
+:root[data-motion="reduce"] *,
+:root[data-motion="reduce"] *::before,
+:root[data-motion="reduce"] *::after {
+  animation: none !important;
+  transition-duration: 0.01ms !important;
+  transition-delay: 0s !important;
+  scroll-behavior: auto !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-motion="full"]) *,
+  :root:not([data-motion="full"]) *::before,
+  :root:not([data-motion="full"]) *::after {
+    animation: none !important;
+    transition-duration: 0.01ms !important;
+    transition-delay: 0s !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* The hold ring is a timer, not decoration: it keeps its 3 s fill. */
+:root .ks-alldone .ks-hold.is-holding .ks-hold__fill {
+  transition-duration: 3s !important;
+}
