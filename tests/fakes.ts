@@ -99,6 +99,10 @@ export class FakeScene implements Scene {
   pulseCard(id: number): void {
     this.pulses.push(id);
   }
+  insets: number[] = [];
+  setTopInset(px: number): void {
+    this.insets.push(px);
+  }
   poke(x: number, y: number): PokeResult | null {
     this.pokes.push({ x, y });
     return typeof this.pokeResult === 'function' ? this.pokeResult(x, y) : this.pokeResult;
@@ -235,8 +239,16 @@ export class FakePromptBar implements PromptBar {
     this.isVisible = true;
     this.calls.push({ op: 'show', challenge });
   }
-  update(challenge: Challenge, hint: HintLevel): void {
+  /** Target codes passed with update() (layout-aware hints). */
+  codes: Array<string | null | undefined> = [];
+  /** What reservedBottom() reports while visible (tests set it). */
+  bottom = 120;
+  update(challenge: Challenge, hint: HintLevel, code?: string | null): void {
     this.calls.push({ op: 'update', challenge, hint });
+    this.codes.push(code);
+  }
+  reservedBottom(): number {
+    return this.isVisible ? this.bottom : 0;
   }
   celebrate(): void {
     this.calls.push({ op: 'celebrate' });

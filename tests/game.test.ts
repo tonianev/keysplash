@@ -1312,3 +1312,95 @@ describe('Game: live settings and page visibility', () => {
     expect(h.promptBar.lastShown?.color).toEqual(expected);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Review fixes
+// ---------------------------------------------------------------------------
+
+describe('Game: review fixes', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  it('between a found answer and the next prompt, keys are free play (never judged against a hidden target)', async () => {
+    const h = setup({ mode: 'find-letters' });
+    await h.begin();
+    const ch = h.challenge();
+    if (ch.kind !== 'find-letter') throw new Error('expected find-letter');
+    pressTarget(h, ch.target);
+    const next = h.challenge();
+    const updates = h.promptBar.updates.length;
+    const retries = h.audio.effectCount('retry');
+    // The child presses the same key again right away — very common.
+    pressTarget(h, ch.target);
+    pressTarget(h, next.kind === 'find-letter' ? otherLetter(next.target) : 'Q');
+    expect(h.audio.effectCount('retry')).toBe(retries);
+    expect(h.promptBar.updates.length).toBe(updates);
+    expect(h.game.getStats().found).toBe(1);
+    h.advance(5000);
+    expect(h.promptBar.lastShown).toBe(next);
+    // Now the game judges again.
+    pressTarget(h, next.kind === 'find-letter' ? otherLetter(next.target) : 'Q');
+    expect(h.audio.effectCount('retry')).toBe(retries + 1);
+  });
+
+  it('the last letter of a spelled word fills its slot before the celebration', async () => {
+    const h = setup({ mode: 'spell' });
+    await h.begin();
+    const ch = h.challenge();
+    if (ch.kind !== 'spell') throw new Error('expected spell');
+    for (const letter of ch.letters) h.press(`Key${letter}`, letter.toLowerCase());
+    const last = h.promptBar.updates.at(-1)!;
+    expect(last.challenge.kind === 'spell' && last.challenge.index).toBe(ch.letters.length);
+    const ops = h.promptBar.calls.map((c) => c.op);
+    expect(ops.lastIndexOf('update')).toBeLessThan(ops.lastIndexOf('celebrate'));
+  });
+
+  it('hints use the physical key learned from this keyboard (AZERTY: A is typed on KeyQ)', async () => {
+    const h = setup({ mode: 'find-letters' });
+    await h.begin();
+    // Teach the game the layout: on AZERTY, the KeyQ position types "a".
+    h.press('KeyQ', 'a');
+    h.advance(5000);
+    // Force a find-A challenge and miss it a few times.
+    let ch = h.challenge();
+    let guard = 0;
+    while ((ch.kind !== 'find-letter' || ch.target !== 'A') && guard++ < 200) ch = h.games.skip({ world: WORLDS.paper, settings: h.store.get(), rng: Math.random }) as Challenge;
+    expect(ch.kind === 'find-letter' && ch.target).toBe('A');
+    for (let i = 0; i < 4; i++) h.press('KeyZ', 'w');
+    expect(h.promptBar.codes.at(-1)).toBe('KeyQ');
+    expect(h.speaker.texts.some((t) => t.includes(describeKeyLocation('KeyQ')))).toBe(true);
+  });
+
+  it('keeps the centre card below the prompt (and its hint keyboard)', async () => {
+    const h = setup({ mode: 'find-letters' });
+    await h.begin();
+    expect(h.scene.insets.at(-1)).toBe(h.promptBar.bottom);
+    h.store.update({ mode: 'explore' });
+    expect(h.scene.insets.at(-1)).toBe(0);
+  });
+
+  it('in a game, digits count with ticks but do not talk over the prompt', async () => {
+    const h = setup({ mode: 'find-letters' });
+    await h.begin();
+    h.advance(3000);
+    const sequences = h.speaker.sequences.length;
+    h.press('Digit3', '3');
+    expect(h.speaker.sequences.length).toBe(sequences);
+    h.advance(3 * TIMING.countStepMs);
+    expect(h.audio.effectCount('count')).toBe(3);
+  });
+
+  it('a prompt that comes due while the page is hidden waits until it is visible again', async () => {
+    const h = setup({ mode: 'find-letters' });
+    await h.begin();
+    const ch = h.challenge();
+    if (ch.kind !== 'find-letter') throw new Error('expected find-letter');
+    pressTarget(h, ch.target);
+    const next = h.challenge();
+    h.visibility.set(false);
+    h.advance(5000);
+    expect(h.promptBar.lastShown).not.toBe(next);
+    h.visibility.set(true);
+    expect(h.promptBar.lastShown).toBe(next);
+  });
+});

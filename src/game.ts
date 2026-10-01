@@ -448,6 +448,7 @@ export class Game {
       this.speaker.sequence([greeting], 1300, challenge.prompt);
     } else {
       this.promptBar.hide();
+      this.scene.setTopInset(0);
       this.speaker.say(greeting, 'high');
     }
   }
@@ -470,6 +471,7 @@ export class Game {
     this.speaker.cancel();
     this.clearLessonTimers();
     this.promptBar.hide();
+    this.scene.setTopInset(0);
     this.resetSession();
     this.lockdown.setConfirmExit(false);
     this.exitLockdown();
@@ -624,6 +626,7 @@ export class Game {
       this.showChallenge(challenge, !this.panel.isOpen);
     } else {
       this.promptBar.hide();
+      this.scene.setTopInset(0);
     }
   }
 
@@ -855,6 +858,7 @@ export class Game {
     this.speaker.cancel();
     this.clearLessonTimers();
     this.promptBar.hide();
+    this.scene.setTopInset(0);
     // Pointer off; the keyboard stays on so the secret word still opens the panel
     // (onKey / onSmash ignore everything else in this state).
     this.pointer.setEnabled(false);
@@ -1032,8 +1036,14 @@ export class Game {
     this.awaitingNext = false;
     this.promptOnVisible = false;
     this.promptBar.show(this.retone(challenge));
+    this.syncInset();
     this.idlePromptAt = this.now() + IDLE_PROMPT_MS;
     if (speak) this.speaker.say(challenge.prompt, 'high');
+  }
+
+  /** Tell the scene how much of the top the prompt (and its hint keyboard) covers. */
+  private syncInset(): void {
+    this.scene.setTopInset(this.promptBar.isVisible ? this.promptBar.reservedBottom() : 0);
   }
 
   /** The physical key a challenge wants next: learned from this keyboard, else US-QWERTY. */
@@ -1061,6 +1071,7 @@ export class Game {
     const ch = outcome.challenge;
     // Fill the slot (spell) / clear the hint — also for the last letter of a word.
     this.promptBar.update(ch, 0, this.targetCode(ch));
+    this.syncInset();
     if (!outcome.complete) {
       this.audio.effect('chime', { velocity: 0.45 });
       return;
@@ -1096,6 +1107,7 @@ export class Game {
     this.scene.showCard(this.cardFor(content, 'small', this.settings.layout === 'keyboard' ? this.spotFor(press.position) : null));
     this.audio.effect('retry', { velocity: 0.35 });
     this.promptBar.update(outcome.challenge, outcome.hint, this.targetCode(outcome.challenge));
+    this.syncInset();
     this.idlePromptAt = this.now() + IDLE_PROMPT_MS;
     let line = outcome.say;
     if (outcome.hint >= 2 && !this.hintSpoken) {

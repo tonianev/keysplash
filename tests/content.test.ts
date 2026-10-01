@@ -473,6 +473,9 @@ describe('helpers', () => {
   it('letterFor / digitFor', () => {
     expect(letterFor('KeyZ', 'z')).toBe('Z');
     expect(letterFor('KeyZ', 'Dead')).toBe('Z');
+    expect(letterFor('KeyM', ',')).toBeNull(); // AZERTY: ',' sits on the KeyM position
+    expect(letterFor('KeyA', 'ф')).toBe('A'); // Cyrillic layout: teach the Latin letter on that key
+    expect(letterFor('KeyQ', 'a')).toBe('A'); // AZERTY: the printed letter wins
     expect(letterFor('Digit1', '1')).toBeNull();
     expect(digitFor('Digit5')).toBe(5);
     expect(digitFor('Numpad0')).toBe(0);

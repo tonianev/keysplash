@@ -31,15 +31,19 @@ export function cardAspect(kind: CardSpec['kind']): number {
   return kind === 'digit' ? 16 / 9 : 4 / 3;
 }
 
-/** Vertical band reserved for the centre card: below the prompt bar, above the shelf. */
-export function centreBand(height: number): { top: number; bottom: number } {
-  return { top: height * 0.13, bottom: height * 0.8 };
+/**
+ * Vertical band reserved for the centre card: below the prompt bar (or below
+ * `topInset`, e.g. the hint keyboard), above the shelf.
+ */
+export function centreBand(height: number, topInset = 0): { top: number; bottom: number } {
+  const top = Math.min(height * 0.5, Math.max(height * 0.13, topInset > 0 ? topInset + 12 : 0));
+  return { top, bottom: height * 0.8 };
 }
 
 /** The centre card's box in focus layout. */
-export function focusCardBox(kind: CardSpec['kind'], width: number, height: number, size: SizeLevel): Box {
+export function focusCardBox(kind: CardSpec['kind'], width: number, height: number, size: SizeLevel, topInset = 0): Box {
   const aspect = cardAspect(kind);
-  const band = centreBand(height);
+  const band = centreBand(height, topInset);
   const availH = (band.bottom - band.top) * 0.96;
   const maxW = width * (kind === 'digit' ? 0.82 : 0.66);
   let w = Math.min(maxW, availH * aspect) * SIZE_FACTOR[size];

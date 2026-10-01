@@ -123,6 +123,13 @@ export class DomPromptBar implements PromptBar {
     this.celebrateTimer = window.setTimeout(() => this.el.classList.remove('is-celebrating'), CELEBRATE_MS);
   }
 
+  reservedBottom(): number {
+    if (!this.visible) return 0;
+    const target = this.el.classList.contains('has-hint') ? this.kbd : this.card;
+    const rect = target.getBoundingClientRect();
+    return Number.isFinite(rect.bottom) ? Math.max(0, rect.bottom) : 0;
+  }
+
   hide(): void {
     window.clearTimeout(this.celebrateTimer);
     this.visible = false;

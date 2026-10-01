@@ -85,6 +85,14 @@ interface CardEnt {
   glide: number;
   sprite: CardSprite | null;
   spriteKey: string;
+  /** Render size + style version the cached key was computed for (avoids per-frame key strings). */
+  keyW: number;
+  keyH: number;
+  keyVersion: number;
+  /** Ten-frame cells for digit cards, cached per card size. */
+  cells: Float32Array | null;
+  cell: number;
+  cellsW: number;
 }
 
 interface Thing {
@@ -119,6 +127,10 @@ export class CanvasScene implements Scene {
   private nextId = 1;
   /** Latest frame time (ms, performance.now origin). */
   private clock = 0;
+  /** Space kept free at the top for the game prompt (CSS px). */
+  private topInset = 0;
+  /** Bumped whenever world / dpr / font / size change, so cached sprite keys refresh. */
+  private styleVersion = 0;
   private centre: CardEnt | null = null;
   private readonly shelf: CardEnt[] = [];
   private readonly free: CardEnt[] = [];
@@ -209,13 +221,13 @@ export class CanvasScene implements Scene {
     const id = this.nextId++;
     const focus = this.options.layout === 'focus';
     const size = focus
-      ? focusCardBox(spec.kind, this.width, this.height, this.options.size)
+      ? focusCardBox(spec.kind, this.width, this.height, this.options.size, this.topInset)
       : keyboardCardSize(spec.kind, this.width, this.height, this.options.size);
     const ent: CardEnt = {
       id, spec, place: 'centre', w: size.w, h: size.h,
       x: 0, y: 0, s: ENTER_SCALE, a: 0, tx: 0, ty: 0, ts: 1, ta: 1,
       age: 0, shown: 0, bornAt: Number.NaN, pulse: 0, hop: 0, glide: spec.direction ? GLIDE_TIME : 0,
-      sprite: null, spriteKey: '',
+      sprite: null, spriteKey: '', keyW: 0, keyH: 0, keyVersion: -1, cells: null, cell: 0, cellsW: 0,
     };
 
     if (!focus) {
@@ -234,7 +246,7 @@ export class CanvasScene implements Scene {
       this.layoutShelf();
     } else {
       if (this.centre) this.toShelf(this.centre);
-      const box = focusCardBox(spec.kind, this.width, this.height, this.options.size);
+      const box = focusCardBox(spec.kind, this.width, this.height, this.options.size, this.topInset);
       ent.tx = box.x;
       ent.ty = box.y;
       this.centre = ent;
@@ -245,6 +257,20 @@ export class CanvasScene implements Scene {
     ent.y = ent.ty + (this.options.reduceMotion ? 0 : ENTER_DY);
     ent.s = this.options.reduceMotion ? ent.ts : ent.ts * ENTER_SCALE;
     return id;
+  }
+
+  setTopInset(px: number): void {
+    const inset = Number.isFinite(px) ? Math.max(0, Math.round(px)) : 0;
+    if (inset === this.topInset) return;
+    this.topInset = inset;
+    // Move/scale the centre card into the new band without re-rendering its sprite.
+    const c = this.centre;
+    if (c && this.options.layout === 'focus') {
+      const box = focusCardBox(c.spec.kind, this.width, this.height, this.options.size, this.topInset);
+      c.tx = box.x;
+      c.ty = box.y;
+      c.ts = box.w / c.w;
+    }
   }
 
   pulseCard(id: number): void {
@@ -312,15 +338,16 @@ export class CanvasScene implements Scene {
     const all = [this.centre, ...this.shelf, ...this.free].filter((c): c is CardEnt => !!c);
     for (const c of all) {
       const size = focus
-        ? focusCardBox(c.spec.kind, this.width, this.height, this.options.size)
+        ? focusCardBox(c.spec.kind, this.width, this.height, this.options.size, this.topInset)
         : keyboardCardSize(c.spec.kind, this.width, this.height, this.options.size);
       c.w = size.w;
       c.h = size.h;
     }
     if (this.centre) {
-      const box = focusCardBox(this.centre.spec.kind, this.width, this.height, this.options.size);
+      const box = focusCardBox(this.centre.spec.kind, this.width, this.height, this.options.size, this.topInset);
       this.centre.tx = box.x;
       this.centre.ty = box.y;
+      this.centre.ts = 1; // w/h were just recomputed for this band
     }
     for (const c of this.free) {
       c.tx = clampTo(c.tx, c.w / 2 + 8, this.width - c.w / 2 - 8);
@@ -330,6 +357,7 @@ export class CanvasScene implements Scene {
   }
 
   private invalidateSprites(): void {
+    this.styleVersion++;
     this.sprites.clear();
     for (const c of [this.centre, ...this.shelf, ...this.free, ...this.leaving]) {
       if (c) {
@@ -339,17 +367,34 @@ export class CanvasScene implements Scene {
     }
   }
 
+  /**
+   * The card's sprite, rendered at the size it is actually shown: full size in
+   * the centre, thumbnail size once settled on the shelf (a mashed key costs a
+   * small render, not a full-resolution one with two shadow passes).
+   */
   private spriteFor(c: CardEnt): CardSprite | null {
+    let rw = c.w;
+    let rh = c.h;
+    if (c.place === 'shelf' && Math.abs(c.s - c.ts) < Math.max(0.04, c.ts * 0.25)) {
+      // Bucket thumbnail heights to 8 px so repeated keys hit the cache.
+      rh = Math.max(16, Math.round((c.h * c.ts) / 8) * 8);
+      rw = rh * (c.w / c.h);
+    } else if (c.place === 'leaving' && c.sprite) {
+      return c.sprite; // fading out: keep whatever it has
+    }
+    if (c.sprite && c.keyW === rw && c.keyH === rh && c.keyVersion === this.styleVersion) return c.sprite;
     const style: CardStyle = { world: this.world, fontFamily: this.options.fontFamily, dpr: this.dpr };
-    const key = cardKey(c.spec, c.w, c.h, style);
-    if (c.sprite && c.spriteKey === key) return c.sprite;
+    const key = cardKey(c.spec, rw, rh, style);
     let sprite = this.sprites.get(key) ?? null;
     if (!sprite) {
-      sprite = renderCard(c.spec, c.w, c.h, style);
+      sprite = renderCard(c.spec, rw, rh, style);
       if (sprite) this.sprites.set(key, sprite, spriteCost(sprite));
     }
     c.sprite = sprite;
     c.spriteKey = key;
+    c.keyW = rw;
+    c.keyH = rh;
+    c.keyVersion = this.styleVersion;
     return sprite;
   }
 
@@ -530,7 +575,10 @@ export class CanvasScene implements Scene {
       }
     }
     for (let i = this.leaving.length - 1; i >= 0; i--) {
-      if (this.leaving[i].a < 0.02) this.leaving.splice(i, 1);
+      if (this.leaving[i].a < 0.02) {
+        this.leaving[i].sprite = null; // let the canvas be collected now
+        this.leaving.splice(i, 1);
+      }
     }
     if (!reduce) this.separate(dt);
 
@@ -585,10 +633,10 @@ export class CanvasScene implements Scene {
           a.ty += dir * push * 0.5;
           b.ty -= dir * push * 0.5;
         }
-        for (const c of [a, b]) {
-          c.tx = clampTo(c.tx, c.w / 2 + 8, this.width - c.w / 2 - 8);
-          c.ty = clampTo(c.ty, c.h / 2 + 8, this.height - c.h / 2 - 8);
-        }
+        a.tx = clampTo(a.tx, a.w / 2 + 8, this.width - a.w / 2 - 8);
+        a.ty = clampTo(a.ty, a.h / 2 + 8, this.height - a.h / 2 - 8);
+        b.tx = clampTo(b.tx, b.w / 2 + 8, this.width - b.w / 2 - 8);
+        b.ty = clampTo(b.ty, b.h / 2 + 8, this.height - b.h / 2 - 8);
       }
     }
   }
@@ -644,8 +692,10 @@ export class CanvasScene implements Scene {
     }
     ctx.globalAlpha = Math.min(1, Math.max(0, c.a));
     if (sprite) {
-      const fw = (sprite.w + sprite.pad * 2) * s;
-      const fh = (sprite.h + sprite.pad * 2) * s;
+      // The sprite may be a thumbnail: scale it to the card's on-screen size.
+      const k = (s * c.w) / sprite.w;
+      const fw = (sprite.w + sprite.pad * 2) * k;
+      const fh = (sprite.h + sprite.pad * 2) * k;
       ctx.drawImage(sprite.canvas, x - fw / 2, y - fh / 2, fw, fh);
     }
     const count = c.spec.kind === 'digit' ? Math.min(10, Math.max(0, c.spec.count ?? 0)) : 0;
@@ -658,7 +708,14 @@ export class CanvasScene implements Scene {
     const stepS = TIMING.countStepMs / 1000;
     const elapsed = Number.isNaN(c.bornAt) ? 0 : Math.max(0, (this.clock - c.bornAt) / 1000);
     const shown = Math.min(count, Math.floor(elapsed / stepS) + 1);
-    const { cells, cell } = tenFrame(c.w, c.h);
+    if (!c.cells || c.cellsW !== c.w) {
+      const frame = tenFrame(c.w, c.h);
+      c.cells = frame.cells;
+      c.cell = frame.cell;
+      c.cellsW = c.w;
+    }
+    const cells = c.cells;
+    const cell = c.cell;
     const sprite = this.emojiSprite(c.spec.picture as string, cell * 0.66);
     if (!sprite) return;
     const ctx = this.ctx;

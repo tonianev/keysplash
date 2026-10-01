@@ -173,7 +173,10 @@ export class DomParentPanel implements ParentPanel {
 
   close(): void {
     if (!this.opened) return;
-    this.commitSecret(false);
+    // Only an explicit Enter / change saves the secret word; anything else typed
+    // (perhaps by a toddler) is discarded when the panel closes.
+    this.secretInput.value = this.deps.store.get().secretWord;
+    this.setSecretError(false);
     this.opened = false;
     window.removeEventListener('keydown', this.onKeyDown, true);
     document.removeEventListener('focusin', this.onFocusIn);
@@ -231,6 +234,19 @@ export class DomParentPanel implements ParentPanel {
       event.preventDefault();
       event.stopPropagation();
       this.resume();
+      return;
+    }
+    // Browser shortcuts (reload, print, zoom, close tab…) and F-keys do nothing here:
+    // a toddler may still be at the keyboard. Copy/paste/undo keep working in fields.
+    if (/^F\d{1,2}$/.test(event.key)) {
+      event.preventDefault();
+      return;
+    }
+    if (event.metaKey || event.ctrlKey || event.altKey) {
+      const target = event.target;
+      const inField = target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement;
+      const editing = inField && !event.altKey && ['a', 'c', 'v', 'x', 'z', 'y'].includes(event.key.toLowerCase());
+      if (!editing) event.preventDefault();
       return;
     }
     if (event.key !== 'Tab') return;

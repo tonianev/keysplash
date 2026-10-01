@@ -845,13 +845,32 @@ describe('DomParentPanel', () => {
     panel.destroy();
   });
 
-  it('a valid but uncommitted secret word is saved when the panel closes', () => {
+  it('text left in the secret-word field is discarded on close (only Enter/change saves)', () => {
     const { panel, store, q } = setup();
     panel.open();
+    const before = store.get().secretWord;
     const input = q<HTMLInputElement>('input[data-setting="secretWord"]');
-    input.value = 'grownup';
+    input.value = 'jfkdls'; // e.g. a toddler mashing while the field had focus
     panel.close();
-    expect(store.get().secretWord).toBe('grownup');
+    expect(store.get().secretWord).toBe(before);
+    expect(input.value).toBe(before);
+    panel.destroy();
+  });
+
+  it('blocks browser shortcuts and F-keys while open, but lets copy/paste work in fields', () => {
+    const { panel, q } = setup();
+    panel.open();
+    const send = (init: KeyboardEventInit, target: EventTarget = window): KeyboardEvent => {
+      const e = new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init });
+      target.dispatchEvent(e);
+      return e;
+    };
+    expect(send({ key: 'r', metaKey: true }).defaultPrevented).toBe(true);
+    expect(send({ key: 'p', ctrlKey: true }).defaultPrevented).toBe(true);
+    expect(send({ key: 'F5' }).defaultPrevented).toBe(true);
+    const input = q<HTMLInputElement>('input[data-setting="secretWord"]');
+    expect(send({ key: 'v', metaKey: true }, input).defaultPrevented).toBe(false);
+    expect(send({ key: 'a' }, input).defaultPrevented).toBe(false);
     panel.destroy();
   });
 

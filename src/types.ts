@@ -603,6 +603,11 @@ export interface Scene {
   /** Gentle pulse on a card (e.g. replaying it). No-op for unknown ids. */
   pulseCard(id: number): void;
   /**
+   * Keep the centre card below this many CSS px from the top (the game prompt,
+   * and its hint keyboard when shown). 0 = default layout.
+   */
+  setTopInset(px: number): void;
+  /**
    * If something is under (x, y), make it react (a small press-in bounce) and
    * return what it is so the game can replay its sound/word; otherwise null.
    */
@@ -704,6 +709,8 @@ export interface PromptBar {
   /** Brief success state (check + colour fill), ~900 ms; the game shows the next challenge after. */
   celebrate(): void;
   hide(): void;
+  /** Bottom edge (CSS px from the viewport top) of what the prompt covers now; 0 when hidden. */
+  reservedBottom(): number;
   readonly isVisible: boolean;
 }
 

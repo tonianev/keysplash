@@ -612,8 +612,8 @@ describe('pickAutoVoice', () => {
     const google = voice('Google US English', 'en-US', false);
     const zira = voice('Microsoft Zira - English (United States)', 'en-US', true);
     expect(pickAutoVoice([google, zira])).toBe(zira.voiceURI);
-    // Only network English voices: use a preferred one.
-    expect(pickAutoVoice([voice('Thomas', 'fr-FR'), google])).toBe(google.voiceURI);
+    // Only network English voices: never pick one automatically (no words leave the device).
+    expect(pickAutoVoice([voice('Thomas', 'fr-FR'), google])).toBeNull();
   });
 
   it('falls back to the first local English voice, never a novelty one', () => {
@@ -643,7 +643,8 @@ class FakeSynth {
   pending = false;
   spoken: FakeUtterance[] = [];
   cancels = 0;
-  voiceList: VoiceLike[] = [];
+  /** An on-device English voice by default (speech stays on-device). */
+  voiceList: VoiceLike[] = [{ name: 'Samantha', lang: 'en-US', voiceURI: 'uri:Samantha', localService: true }];
   private listeners: Array<() => void> = [];
   getVoices(): VoiceLike[] {
     return this.voiceList;
@@ -776,11 +777,13 @@ describe('WebSpeaker', () => {
   });
 
   it('loads voices asynchronously and picks one automatically', () => {
+    synth.voiceList = [];
     const changed = vi.fn();
     const off = speaker.onVoicesChanged(changed);
     expect(speaker.voices()).toEqual([]);
-    speaker.say('before'); // no voices yet: browser default, English
-    expect(synth.spoken[0].voice).toBeNull();
+    speaker.say('before'); // voices unknown yet: stay silent rather than risk a network voice
+    expect(synth.spoken).toHaveLength(0);
+    synth.spoken.push(new FakeUtterance('placeholder')); // keep the indices below stable
 
     synth.loadVoices([voice('Albert', 'en-US'), voice('Anna', 'de-DE'), voice('Samantha', 'en-US'), voice('Daniel', 'en-GB')]);
     expect(changed).toHaveBeenCalledTimes(1);
@@ -803,6 +806,15 @@ describe('WebSpeaker', () => {
     off();
     synth.loadVoices([]);
     expect(changed).toHaveBeenCalledTimes(1);
+  });
+
+  it('stays silent when only network voices exist, unless a grown-up picks one', () => {
+    synth.voiceList = [{ name: 'Google US English', lang: 'en-US', voiceURI: 'uri:google', localService: false }];
+    speaker.say('Hi, Emma!', 'high');
+    expect(synth.spoken).toHaveLength(0); // the child's name never leaves the device unasked
+    speaker.setVoice('uri:google'); // explicit choice in the panel ("· online")
+    speaker.say('Hi, Emma!', 'high');
+    expect(synth.spoken).toHaveLength(1);
   });
 
   it('uses onvoiceschanged when addEventListener is missing', () => {

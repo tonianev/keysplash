@@ -117,10 +117,11 @@ export function rankVoices(voices: readonly VoiceLike[]): VoiceInfo[] {
 /**
  * The voice to use when the parent has not picked one, as a voiceURI (null = browser default).
  *
- * On-device voices win over network ones: KeySplash promises to work offline and
- * send nothing anywhere, and network voices ("Google US English", "… Online
- * (Natural)") fail without a connection. Order: preferred on-device voice → any
- * on-device English voice → preferred network voice → null.
+ * Only on-device voices are ever picked automatically: KeySplash promises to
+ * work offline and send nothing anywhere, and network voices ("Google US
+ * English", "… Online (Natural)") send every word to a server. Order: preferred
+ * on-device voice → any on-device English voice → null. A grown-up can still
+ * choose a network voice in the panel, where it is labelled "online".
  */
 export function pickAutoVoice(voices: readonly VoiceLike[]): string | null {
   const english = voices.filter((v) => usable(v) && langRank(v.lang) < 4).sort(byRankThenName);
@@ -130,10 +131,6 @@ export function pickAutoVoice(voices: readonly VoiceLike[]): string | null {
     if (hit) return uriOf(hit);
   }
   if (onDevice.length > 0) return uriOf(onDevice[0]);
-  for (const preferred of PREFERRED_VOICES) {
-    const hit = english.find((v) => nameMatches(v.name, preferred));
-    if (hit) return uriOf(hit);
-  }
   return null;
 }
 
@@ -259,6 +256,7 @@ export class WebSpeaker implements Speaker {
   private speakNow(phrase: string, now: number): void {
     const synth = this.synth;
     if (!synth) return;
+    if (!this.voiceURI && !this.hasLocalVoice()) return; // never send words off-device unasked
     try {
       if (synth.speaking || synth.pending) synth.cancel();
       const utterance = new SpeechSynthesisUtterance(phrase);
@@ -320,6 +318,18 @@ export class WebSpeaker implements Speaker {
     if (now < this.busyUntil) return true;
     this.cancel();
     return false;
+  }
+
+  /**
+   * True when speaking with no explicit choice stays on this device: an
+   * on-device voice exists to fall back on. (Voices not loaded yet → unknown → no.)
+   */
+  private hasLocalVoice(): boolean {
+    const list = this.rawVoices();
+    if (list.length === 0) return false;
+    if (this.resolveVoice()) return true;
+    const fallback = list.find((v) => v.default) ?? list[0];
+    return fallback.localService !== false;
   }
 
   private rawVoices(): SpeechSynthesisVoice[] {
