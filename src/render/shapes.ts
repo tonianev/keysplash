@@ -1,14 +1,15 @@
 /**
- * Cute shape art: outlines, glossy fills and kawaii faces.
+ * Flat, matte shape art (v2, DESIGN.md §2): flat fills, a soft tonal rim,
+ * optional simple faces, and rounded arrows for direction cards.
  *
  * Every path is centred on (0, 0) and fits inside a circle of radius `r`; the
  * caller translates / rotates / scales. Geometry that needs trigonometry
- * (moon, flower, cloud, heart) is solved once at module load in unit space, so
- * tracing a shape per frame is only a handful of path commands and no
- * allocations. Fills are gradients built in unit space and cached per context
- * and colour, so drawing a shape every frame does not create new gradients.
+ * (moon, heart) is solved once at module load in unit space, so tracing a
+ * shape is only a handful of path commands and no allocations. No gradients,
+ * no gloss, no glow.
  */
-import type { NamedColor, ShapeKind } from '../types';
+import type { DirectionName, NamedColor, ShapeKind } from '../types';
+import { darken, lighten } from './color';
 
 const TAU = Math.PI * 2;
 
@@ -72,72 +73,6 @@ const MOON = (() => {
   };
 })();
 
-/** Five round petals; the outline is the outer arc of each petal circle. */
-const FLOWER = (() => {
-  const n = 5;
-  const d = 0.53; // petal centre distance
-  const pr = 0.42; // petal radius
-  const half = Math.PI / n;
-  // Outer intersection of neighbouring petals lies on their bisector.
-  const q = d * Math.cos(half) + Math.sqrt(pr * pr - (d * Math.sin(half)) ** 2);
-  const beta = Math.atan2(q * Math.sin(half), q * Math.cos(half) - d);
-  const cx = new Float64Array(n);
-  const cy = new Float64Array(n);
-  const ang = new Float64Array(n);
-  for (let i = 0; i < n; i++) {
-    const a = -Math.PI / 2 + (i * TAU) / n;
-    cx[i] = Math.cos(a) * d;
-    cy[i] = Math.sin(a) * d;
-    ang[i] = a;
-  }
-  return { n, pr, beta, cx, cy, ang, centre: 0.34 };
-})();
-
-function upperIntersection(
-  x0: number, y0: number, r0: number,
-  x1: number, y1: number, r1: number,
-): [number, number] {
-  const dx = x1 - x0;
-  const dy = y1 - y0;
-  const d = Math.hypot(dx, dy);
-  const a = (r0 * r0 - r1 * r1 + d * d) / (2 * d);
-  const h = Math.sqrt(Math.max(0, r0 * r0 - a * a));
-  const px = x0 + (a * dx) / d;
-  const py = y0 + (a * dy) / d;
-  const ux = (h * dy) / d;
-  const uy = (h * dx) / d;
-  return py - uy < py + uy ? [px + ux, py - uy] : [px - ux, py + uy];
-}
-
-/**
- * Puffy cloud: a chain of four overlapping bumps traced along their outer
- * arcs, closed by a gently bulging flat bottom. Stored as 4 × (x, y, r, a0, a1).
- */
-const CLOUD = (() => {
-  const s = 0.95;
-  const bumps = [
-    [-0.6, 0.24, 0.32],
-    [-0.25, -0.04, 0.4],
-    [0.22, -0.14, 0.42],
-    [0.6, 0.22, 0.34],
-  ].map(([x, y, r]) => [x * s, y * s, r * s]);
-  const meet: Array<[number, number]> = [];
-  for (let i = 0; i < bumps.length - 1; i++) {
-    const [x0, y0, r0] = bumps[i];
-    const [x1, y1, r1] = bumps[i + 1];
-    meet.push(upperIntersection(x0, y0, r0, x1, y1, r1));
-  }
-  const arcs = new Float64Array(bumps.length * 5);
-  for (let i = 0; i < bumps.length; i++) {
-    const [x, y, r] = bumps[i];
-    const start = i === 0 ? Math.PI / 2 : Math.atan2(meet[i - 1][1] - y, meet[i - 1][0] - x);
-    const end = i === bumps.length - 1 ? Math.PI / 2 : Math.atan2(meet[i][1] - y, meet[i][0] - x);
-    arcs.set([x, y, r, start, end], i * 5);
-  }
-  const [fx, fy, fr] = bumps[0];
-  return { arcs, count: bumps.length, startX: fx, startY: fy + fr, bulgeY: (fy + fr) * 1.14 };
-})();
-
 // ---------------------------------------------------------------------------
 // Path tracing
 // ---------------------------------------------------------------------------
@@ -187,24 +122,6 @@ function traceMoon(ctx: CanvasRenderingContext2D, r: number): void {
   ctx.closePath();
 }
 
-function traceFlower(ctx: CanvasRenderingContext2D, r: number): void {
-  const f = FLOWER;
-  for (let i = 0; i < f.n; i++) {
-    ctx.arc(f.cx[i] * r, f.cy[i] * r, f.pr * r, f.ang[i] - f.beta, f.ang[i] + f.beta, false);
-  }
-  ctx.closePath();
-}
-
-function traceCloud(ctx: CanvasRenderingContext2D, r: number): void {
-  const a = CLOUD.arcs;
-  for (let i = 0; i < CLOUD.count; i++) {
-    const o = i * 5;
-    ctx.arc(a[o] * r, a[o + 1] * r, a[o + 2] * r, a[o + 3], a[o + 4], false);
-  }
-  ctx.quadraticCurveTo(0, CLOUD.bulgeY * r, CLOUD.startX * r, CLOUD.startY * r);
-  ctx.closePath();
-}
-
 /** Builds the outline path for `shape` (beginPath included; no fill or stroke). */
 export function traceShape(ctx: CanvasRenderingContext2D, shape: ShapeKind, r: number): void {
   ctx.beginPath();
@@ -232,281 +149,151 @@ export function traceShape(ctx: CanvasRenderingContext2D, shape: ShapeKind, r: n
     case 'moon':
       traceMoon(ctx, r);
       break;
-    case 'flower':
-      traceFlower(ctx, r);
+    case 'oval':
+      ctx.ellipse(0, 0, r * 0.98, r * 0.7, 0, 0, TAU);
+      break;
+    case 'rectangle':
+      VERTS[0] = -r; VERTS[1] = -r * 0.62;
+      VERTS[2] = r; VERTS[3] = -r * 0.62;
+      VERTS[4] = r; VERTS[5] = r * 0.62;
+      VERTS[6] = -r; VERTS[7] = r * 0.62;
+      traceRoundedVerts(ctx, 4, r * 0.16, r * 0.16);
       break;
     case 'hexagon':
       traceRoundedVerts(ctx, regularVerts(6, r * 0.98, 0, 0), r * 0.2, r * 0.2);
-      break;
-    case 'cloud':
-      traceCloud(ctx, r);
       break;
     default: // 'circle', and any unknown kind degrades to a circle
       ctx.arc(0, 0, r * 0.94, 0, TAU);
   }
 }
 
+
 // ---------------------------------------------------------------------------
-// Colour + cached paints
+// Matte paint
 // ---------------------------------------------------------------------------
 
-interface Rgb { r: number; g: number; b: number }
+/** Rim colours per (hex, dark) — tiny bounded cache so drawing never re-derives colours. */
+const rimCache = new Map<string, string>();
+const RIM_CACHE_MAX = 64;
 
-const WHITE: Rgb = { r: 255, g: 255, b: 255 };
-const BLACK: Rgb = { r: 0, g: 0, b: 0 };
-
-function parseHex(hex: string): Rgb {
-  let h = hex.trim().replace('#', '');
-  if (h.length === 3 || h.length === 4) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
-  const n = Number.parseInt(h.slice(0, 6), 16);
-  if (h.length < 6 || Number.isNaN(n)) return { r: 160, g: 160, b: 170 };
-  return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
-}
-
-function mix(a: Rgb, b: Rgb, t: number): Rgb {
-  return { r: a.r + (b.r - a.r) * t, g: a.g + (b.g - a.g) * t, b: a.b + (b.b - a.b) * t };
-}
-
-function css(c: Rgb): string {
-  return `rgb(${Math.round(c.r)},${Math.round(c.g)},${Math.round(c.b)})`;
-}
-
-interface Paint {
-  /** Gradient in unit space: draw with the context scaled by r. */
-  fill: CanvasGradient;
-  stroke: string;
-}
-
-interface PaintSet {
-  light: Map<string, Paint>;
-  dark: Map<string, Paint>;
-}
-
-/** Gradients are per context; palettes are small, but cap anyway in case colours are generated. */
-const paintCache = new WeakMap<CanvasRenderingContext2D, PaintSet>();
-const PAINT_CACHE_MAX = 64;
-
-function paintFor(ctx: CanvasRenderingContext2D, hex: string, dark: boolean): Paint {
-  let set = paintCache.get(ctx);
-  if (!set) {
-    set = { light: new Map(), dark: new Map() };
-    paintCache.set(ctx, set);
+function rimFor(hex: string, dark: boolean): string {
+  const key = dark ? `d${hex}` : `l${hex}`;
+  let rim = rimCache.get(key);
+  if (!rim) {
+    rim = dark ? lighten(hex, 0.14) : darken(hex, 0.16);
+    if (rimCache.size >= RIM_CACHE_MAX) rimCache.clear();
+    rimCache.set(key, rim);
   }
-  const map = dark ? set.dark : set.light;
-  let paint = map.get(hex);
-  if (!paint) {
-    if (map.size >= PAINT_CACHE_MAX) map.clear();
-    const base = parseHex(hex);
-    const fill = ctx.createLinearGradient(-0.75, -0.85, 0.65, 0.9);
-    fill.addColorStop(0, css(mix(base, WHITE, 0.5)));
-    fill.addColorStop(0.42, css(base));
-    fill.addColorStop(1, css(mix(base, BLACK, 0.2)));
-    paint = {
-      fill,
-      // Dark worlds: a soft, very light tint. Light worlds: a deep shade of the colour.
-      stroke: dark ? css(mix(base, WHITE, 0.78)) : css(mix(base, BLACK, 0.45)),
-    };
-    map.set(hex, paint);
-  }
-  return paint;
+  return rim;
 }
 
-// ---------------------------------------------------------------------------
-// drawShape
-// ---------------------------------------------------------------------------
-
-/** Glossy highlight per shape: centre (x, y) and size, in unit space, placed on a broad top-left area. */
-const GLOSS: Record<ShapeKind, readonly [number, number, number]> = {
-  circle: [-0.38, -0.42, 1],
-  square: [-0.38, -0.42, 1],
-  triangle: [-0.22, -0.12, 0.7],
-  star: [-0.17, -0.32, 0.6],
-  heart: [-0.42, -0.4, 0.8],
-  diamond: [-0.2, -0.38, 0.6],
-  moon: [-0.58, -0.32, 0.55],
-  flower: [-0.5, -0.26, 0.55],
-  hexagon: [-0.36, -0.4, 0.95],
-  cloud: [-0.33, -0.26, 0.8],
-};
-
-const GLOSS_SOFT = 'rgba(255,255,255,0.38)';
-const GLOSS_HOT = 'rgba(255,255,255,0.75)';
-const FLOWER_CENTRE = '#ffd84d';
-const FLOWER_CENTRE_ALT = '#ff9f43'; // for yellow flowers
-
-/** Clipped glossy highlight. Expects the shape path to be current and the context scaled by r. */
-function drawGloss(ctx: CanvasRenderingContext2D, x: number, y: number, s: number): void {
-  ctx.save();
-  ctx.clip();
-  ctx.fillStyle = GLOSS_SOFT;
-  ctx.beginPath();
-  ctx.ellipse(x, y, 0.3 * s, 0.16 * s, -0.7, 0, TAU);
-  ctx.fill();
-  ctx.fillStyle = GLOSS_HOT;
-  ctx.beginPath();
-  ctx.ellipse(x - 0.06 * s, y - 0.02 * s, 0.09 * s, 0.05 * s, -0.7, 0, TAU);
-  ctx.fill();
-  ctx.restore();
+function rimWidth(r: number): number {
+  return Math.max(1, Math.min(4, r * 0.04));
 }
 
-/**
- * Gradient-filled shape (light top-left → colour → deeper bottom-right) with a
- * thick rounded outline and a glossy highlight. Centred on (0, 0).
- */
-export function drawShape(
-  ctx: CanvasRenderingContext2D,
-  shape: ShapeKind,
-  r: number,
-  color: NamedColor,
-  dark: boolean,
-): void {
+/** Flat matte fill in the colour itself, with a soft tonal rim. No gradients, no gloss. */
+export function drawShape(ctx: CanvasRenderingContext2D, shape: ShapeKind, r: number, color: NamedColor, dark: boolean): void {
   if (!(r > 0)) return;
-  const paint = paintFor(ctx, color.hex, dark);
-  const g = GLOSS[shape] ?? GLOSS.circle;
-  const lineWidth = Math.max(0.085, 1.5 / r); // ≥ 1.5 px at small sizes
-
-  ctx.save();
-  ctx.scale(r, r); // everything below is in unit space, so cached gradients fit any size
-  ctx.lineJoin = 'round';
-  ctx.lineCap = 'round';
-
-  traceShape(ctx, shape, 1);
-  ctx.fillStyle = paint.fill;
+  traceShape(ctx, shape, r);
+  ctx.fillStyle = color.hex;
   ctx.fill();
-  drawGloss(ctx, g[0], g[1], g[2]);
-
-  traceShape(ctx, shape, 1); // the gloss replaced the path
-  ctx.lineWidth = lineWidth;
-  ctx.strokeStyle = paint.stroke;
+  ctx.lineJoin = 'round';
+  ctx.lineWidth = rimWidth(r);
+  ctx.strokeStyle = rimFor(color.hex, dark);
   ctx.stroke();
-
-  if (shape === 'flower') {
-    const c = FLOWER.centre;
-    const centre = paintFor(ctx, color.name === 'yellow' || color.name === 'orange' ? FLOWER_CENTRE_ALT : FLOWER_CENTRE, dark);
-    ctx.beginPath();
-    ctx.arc(0, 0, c, 0, TAU);
-    ctx.fillStyle = centre.fill;
-    ctx.fill();
-    drawGloss(ctx, -0.12, -0.14, 0.42);
-    ctx.beginPath();
-    ctx.arc(0, 0, c, 0, TAU);
-    ctx.lineWidth = lineWidth * 0.8;
-    ctx.strokeStyle = centre.stroke;
-    ctx.stroke();
-  }
-  ctx.restore();
 }
 
 // ---------------------------------------------------------------------------
-// drawFace
+// Faces (only when the grown-ups turn them on)
 // ---------------------------------------------------------------------------
 
-/** Face placement per shape: centre (x, y) and scale, in units of r. */
-const FACE: Record<ShapeKind, readonly [number, number, number]> = {
-  circle: [0, 0.06, 0.95],
-  square: [0, 0.06, 0.95],
-  triangle: [0, 0.16, 0.68], // lower centre, where the triangle is wide
-  star: [0, 0.06, 0.6],
-  heart: [0, -0.02, 0.85],
-  diamond: [0, 0.02, 0.68],
-  moon: [MOON.faceX, MOON.faceY, 0.44], // on the thick inner band
-  flower: [0, 0, 0.4], // on the centre disc
-  hexagon: [0, 0.04, 0.92],
-  cloud: [0, 0.14, 0.8],
-};
+const FACE_INK = 'rgba(31,35,40,0.82)';
 
-const EYE = '#2b2140';
-const GLINT = '#ffffff';
-const CHEEK = 'rgba(255,110,150,0.42)';
-const TONGUE = '#ff7a93';
-// Face layout in face units (1 = the face's scaled radius).
-const EYE_X = 0.3;
-const EYE_Y = -0.06;
-const EYE_RX = 0.1;
-const EYE_RY = 0.13;
-const LID_R = 0.085;
-const LID_A0 = Math.PI * 1.1;
-const LID_A1 = Math.PI * 1.9;
-const LID_DX = Math.cos(LID_A0) * LID_R;
-const LID_DY = Math.sin(LID_A0) * LID_R;
+function faceCentre(shape: ShapeKind, r: number): [number, number] {
+  switch (shape) {
+    case 'triangle':
+      return [0, r * 0.2];
+    case 'moon':
+      return [MOON.faceX * r, MOON.faceY * r];
+    case 'heart':
+      return [0, -r * 0.02];
+    case 'star':
+      return [0, r * 0.04];
+    default:
+      return [0, 0];
+  }
+}
 
-/**
- * Kawaii face: two dark eyes with glints (blink 0 open … 1 a happy closed
- * arc), rosy cheeks, and a small smile or an "oh" mouth.
- */
-export function drawFace(
-  ctx: CanvasRenderingContext2D,
-  shape: ShapeKind,
-  r: number,
-  blink: number,
-  mood: 'smile' | 'oh',
-): void {
+/** A simple, friendly face. `blink` 0 open … 1 closed; 'oh' gives a small round mouth. */
+export function drawFace(ctx: CanvasRenderingContext2D, shape: ShapeKind, r: number, blink: number, mood: 'smile' | 'oh'): void {
   if (!(r > 0)) return;
-  const f = FACE[shape] ?? FACE.circle;
-  const u = r * f[2];
-  const b = blink > 0 ? (blink < 1 ? blink : 1) : 0; // also maps NaN to 0
-  const lineWidth = Math.max(0.07, 1.2 / u);
-
-  ctx.save();
-  ctx.translate(f[0] * r, f[1] * r);
-  ctx.scale(u, u);
+  const scale = shape === 'moon' ? 0.55 : shape === 'triangle' || shape === 'star' ? 0.8 : 1;
+  const [cx, cy] = faceCentre(shape, r);
+  const s = r * scale;
+  const ex = s * 0.22;
+  const ey = cy - s * 0.1;
+  const er = Math.max(1, s * 0.075);
+  ctx.fillStyle = FACE_INK;
+  ctx.strokeStyle = FACE_INK;
   ctx.lineCap = 'round';
-  ctx.lineJoin = 'round';
-
-  // Cheeks
-  ctx.fillStyle = CHEEK;
-  ctx.beginPath();
-  ctx.ellipse(-0.52, 0.17, 0.14, 0.085, 0, 0, TAU);
-  ctx.moveTo(0.66, 0.17);
-  ctx.ellipse(0.52, 0.17, 0.14, 0.085, 0, 0, TAU);
-  ctx.fill();
-
-  // Eyes
-  ctx.fillStyle = EYE;
-  ctx.strokeStyle = EYE;
-  if (b < 0.7) {
-    const squash = 1 - b * 1.2; // 1 → 0.16 just before the closed arc
-    const ry = EYE_RY * squash;
+  ctx.lineWidth = Math.max(1, s * 0.05);
+  const b = Math.min(1, Math.max(0, blink));
+  for (const side of [-1, 1]) {
+    const x = cx + side * ex;
     ctx.beginPath();
-    ctx.ellipse(-EYE_X, EYE_Y, EYE_RX, ry, 0, 0, TAU);
-    ctx.moveTo(EYE_X + EYE_RX, EYE_Y);
-    ctx.ellipse(EYE_X, EYE_Y, EYE_RX, ry, 0, 0, TAU);
-    ctx.fill();
-    if (squash > 0.5) {
-      const gy = EYE_Y - 0.045 * squash;
-      ctx.fillStyle = GLINT;
-      ctx.beginPath();
-      ctx.arc(-EYE_X - 0.03, gy, 0.036, 0, TAU);
-      ctx.moveTo(EYE_X - 0.03 + 0.036, gy);
-      ctx.arc(EYE_X - 0.03, gy, 0.036, 0, TAU);
+    if (b > 0.8) {
+      // Closed: a gentle happy arc.
+      ctx.arc(x, ey - er * 0.2, er, 0.15 * Math.PI, 0.85 * Math.PI);
+      ctx.stroke();
+    } else {
+      ctx.ellipse(x, ey, er, er * (1 - b), 0, 0, TAU);
       ctx.fill();
     }
-  } else {
-    // Happy closed eyes: ∩ ∩
-    const y = EYE_Y + 0.04;
-    ctx.lineWidth = lineWidth;
-    ctx.beginPath();
-    ctx.arc(-EYE_X, y, LID_R, LID_A0, LID_A1);
-    ctx.moveTo(EYE_X + LID_DX, y + LID_DY);
-    ctx.arc(EYE_X, y, LID_R, LID_A0, LID_A1);
-    ctx.stroke();
   }
-
-  // Mouth
+  ctx.beginPath();
   if (mood === 'oh') {
-    ctx.fillStyle = EYE;
-    ctx.beginPath();
-    ctx.ellipse(0, 0.2, 0.07, 0.085, 0, 0, TAU);
-    ctx.fill();
-    ctx.fillStyle = TONGUE;
-    ctx.beginPath();
-    ctx.ellipse(0, 0.245, 0.04, 0.025, 0, 0, TAU);
+    ctx.arc(cx, cy + s * 0.14, Math.max(1, s * 0.06), 0, TAU);
     ctx.fill();
   } else {
-    ctx.lineWidth = lineWidth;
-    ctx.beginPath();
-    ctx.arc(0, 0.07, 0.13, Math.PI * 0.2, Math.PI * 0.8);
+    ctx.arc(cx, cy + s * 0.04, s * 0.15, 0.2 * Math.PI, 0.8 * Math.PI);
     ctx.stroke();
   }
-  ctx.restore();
+}
+
+// ---------------------------------------------------------------------------
+// Arrows (direction cards)
+// ---------------------------------------------------------------------------
+
+const ARROW_ANGLE: Record<DirectionName, number> = { right: 0, down: Math.PI / 2, left: Math.PI, up: -Math.PI / 2 };
+
+/** Chunky rounded arrow outline pointing in `direction` (beginPath included). */
+export function traceArrow(ctx: CanvasRenderingContext2D, direction: DirectionName, r: number): void {
+  ctx.beginPath();
+  if (!(r > 0)) return;
+  const a = ARROW_ANGLE[direction] ?? 0;
+  const cos = Math.cos(a);
+  const sin = Math.sin(a);
+  // Pointing right in unit space: shaft then head.
+  const pts = [
+    -0.85, -0.24, 0.05, -0.24, 0.05, -0.66, 0.9, 0, 0.05, 0.66, 0.05, 0.24, -0.85, 0.24,
+  ];
+  for (let i = 0; i < pts.length; i += 2) {
+    const x = pts[i] * r;
+    const y = pts[i + 1] * r;
+    VERTS[i] = x * cos - y * sin;
+    VERTS[i + 1] = x * sin + y * cos;
+  }
+  traceRoundedVerts(ctx, pts.length / 2, r * 0.09, r * 0.09);
+}
+
+/** Flat matte arrow with the same rim treatment as shapes. */
+export function drawArrow(ctx: CanvasRenderingContext2D, direction: DirectionName, r: number, color: NamedColor, dark: boolean): void {
+  if (!(r > 0)) return;
+  traceArrow(ctx, direction, r);
+  ctx.fillStyle = color.hex;
+  ctx.fill();
+  ctx.lineJoin = 'round';
+  ctx.lineWidth = rimWidth(r);
+  ctx.strokeStyle = rimFor(color.hex, dark);
+  ctx.stroke();
 }
