@@ -1,65 +1,14 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
   <title>KeySplash</title>
-  <defs>
-    <radialGradient id="sky" cx="50%" cy="48%" r="62%">
-      <stop offset="0" stop-color="#232d6e"/>
-      <stop offset="0.62" stop-color="#121a42"/>
-      <stop offset="1" stop-color="#0b1026"/>
-    </radialGradient>
-    <linearGradient id="capSide" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#e5525e"/>
-      <stop offset="1" stop-color="#b9334f"/>
-    </linearGradient>
-    <linearGradient id="capTop" x1="0" y1="0" x2="0.35" y2="1">
-      <stop offset="0" stop-color="#ff9a8f"/>
-      <stop offset="1" stop-color="#ff6b6b"/>
-    </linearGradient>
-    <radialGradient id="glow" cx="50%" cy="50%" r="50%">
-      <stop offset="0" stop-color="#ffd166" stop-opacity="0.32"/>
-      <stop offset="1" stop-color="#ffd166" stop-opacity="0"/>
-    </radialGradient>
-  </defs>
-
-  <!-- Night tile. Corners are transparent; maskable/apple exports fill them with #0b1026. -->
-  <rect width="512" height="512" rx="112" fill="url(#sky)"/>
-  <path d="M70 64L71.1 68.9L76 70L71.1 71.1L70 76L68.9 71.1L64 70L68.9 68.9Z" fill="#ffffff" opacity="0.55"/>
-  <path d="M446 430L447.1 434.9L452 436L447.1 437.1L446 442L444.9 437.1L440 436L444.9 434.9Z" fill="#ffffff" opacity="0.45"/>
-  <circle cx="440" cy="84" r="2.5" fill="#ffffff" opacity="0.5"/>
-  <circle cx="72" cy="432" r="2.5" fill="#ffffff" opacity="0.4"/>
-
-  <!-- Splash bursting out of the key (kept inside the maskable safe zone). -->
-  <circle cx="256" cy="150" r="150" fill="url(#glow)"/>
-  <g stroke-linecap="round" fill="none" stroke-width="10">
-    <path d="M220 146 214 121" stroke="#4cc9f0"/>
-    <path d="M292 146 298 121" stroke="#9b5de5"/>
-    <path d="M156 178 141 162" stroke="#ffd166"/>
-    <path d="M356 178 371 162" stroke="#06d6a0"/>
-    <path d="M138 240 118 236" stroke="#06d6a0"/>
-    <path d="M374 240 394 236" stroke="#ffd166"/>
-  </g>
-  <path d="M256 62L266.9 87L294 89.6L273.6 107.7L279.5 134.4L256 120.5L232.5 134.4L238.4 107.7L218 89.6L245.1 87Z"
-        fill="#ffd166" stroke="#ffd166" stroke-width="8" stroke-linejoin="round"/>
-  <circle cx="168" cy="122" r="17" fill="#06d6a0"/>
-  <circle cx="344" cy="122" r="17" fill="#4cc9f0"/>
-  <circle cx="206" cy="80" r="8" fill="#ffd166"/>
-  <circle cx="314" cy="76" r="7" fill="#06d6a0"/>
-  <path d="M119 176.5L122.2 192.6L137.9 197.5L123.5 205.5L123.8 221.9L111.7 210.8L96.2 216.1L103.1 201.1L93.2 188L109.5 190Z"
-        fill="#9b5de5" stroke="#9b5de5" stroke-width="6" stroke-linejoin="round"/>
-  <path d="M402 169L405.5 184.5L421 188L405.5 191.5L402 207L398.5 191.5L383 188L398.5 184.5Z" fill="#ffffff"/>
-  <path d="M404 290L406.7 301.3L418 304L406.7 306.7L404 318L401.3 306.7L390 304L401.3 301.3Z" fill="#ffd166"/>
-  <circle cx="108" cy="300" r="10" fill="#4cc9f0"/>
-  <circle cx="392" cy="362" r="8" fill="#9b5de5"/>
-  <circle cx="122" cy="366" r="7" fill="#06d6a0"/>
-
-  <!-- Chunky keycap. -->
-  <ellipse cx="256" cy="404" rx="112" ry="14" fill="#000000" opacity="0.35"/>
-  <rect x="150" y="178" width="212" height="222" rx="52" fill="url(#capSide)"/>
-  <rect x="166" y="184" width="180" height="174" rx="42" fill="url(#capTop)"/>
-  <rect x="190" y="196" width="112" height="14" rx="7" fill="#ffffff" opacity="0.28"/>
-
-  <!-- The "K", drawn as strokes so it needs no font. -->
-  <g fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-width="34">
-    <path d="M219 228V320M289 228 227 282M247 266 293 320" stroke="#c63c55" opacity="0.55" transform="translate(0 6)"/>
-    <path d="M219 228V320M289 228 227 282M247 266 293 320" stroke="#ffffff"/>
-  </g>
+  <!-- Matte tile (fills the whole square so maskable crops stay clean). -->
+  <rect width="512" height="512" fill="#4A86D8"/>
+  <!-- Keycap: soft contact shadow, cream cap. -->
+  <rect x="124" y="140" width="264" height="252" rx="64" fill="#3A6DB8"/>
+  <rect x="124" y="120" width="264" height="252" rx="64" fill="#FBF7F0"/>
+  <!-- A bold rounded K in matte red. -->
+  <path d="M212 178v136M296 178l-72 70M246 228l56 86" fill="none" stroke="#E0604F" stroke-width="34" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- Three small dots: yellow, green, pink. -->
+  <circle cx="356" cy="104" r="20" fill="#E9B730"/>
+  <circle cx="404" cy="146" r="14" fill="#4FA66A"/>
+  <circle cx="400" cy="92" r="10" fill="#DE6FA1"/>
 </svg>
