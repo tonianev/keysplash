@@ -99,7 +99,10 @@ export interface World {
 // Settings (parent controls) — persisted to localStorage
 // ---------------------------------------------------------------------------
 
-export type SpeechMode = 'off' | 'letter' | 'word';
+/** What the voice says on a letter key. (Whether it speaks at all is `Settings.voice`.) */
+export type SpeechMode = 'letter' | 'word';
+/** natural = the built-in recorded neural voice; device = this computer's speech voices. */
+export type VoiceStyle = 'natural' | 'device';
 export type LetterCase = 'upper' | 'lower' | 'both';
 export type SizeLevel = 'normal' | 'big' | 'huge';
 export type Intensity = 'calm' | 'normal' | 'lively';
@@ -121,9 +124,13 @@ export interface Settings {
   muted: boolean;
   /** Soft musical note under each key press (otherwise a quiet tap sound). */
   notes: boolean;
+  /** The clear on/off switch for the voice (start screen + grown-up panel). */
+  voice: boolean;
+  /** Built-in natural voice (default) or this device's speech voices. */
+  voiceStyle: VoiceStyle;
   /** 'letter' → "B"; 'word' → "B… B is for ball". */
   speech: SpeechMode;
-  /** `SpeechSynthesisVoice.voiceURI`, or null for automatic choice. */
+  /** Device style only: `SpeechSynthesisVoice.voiceURI`, or null for automatic choice. */
   voiceURI: string | null;
   letterCase: LetterCase;
   /** Show the picture (emoji) that goes with a letter, e.g. B → ⚽. */
@@ -445,7 +452,7 @@ export interface NoteOptions {
   step?: number;
 }
 
-export interface AudioEngine {
+export interface AudioEngine extends VoiceOutput {
   /** Create/resume the AudioContext. Call from a user gesture. Safe to call repeatedly. */
   unlock(): Promise<void>;
   readonly ready: boolean;
@@ -498,6 +505,33 @@ export interface Speaker {
   readonly sequencing: boolean;
   /** Stops speech and any pending sequence. Always safe. */
   cancel(): void;
+  /** Switch between the built-in natural voice and device voices (router only). */
+  setStyle?(style: VoiceStyle): void;
+  /** Prefetch/decode the most common lines after audio unlock (natural voice). */
+  warm?(): void;
+}
+
+/** One playing (or scheduled) voice clip. */
+export interface VoicePlayback {
+  /** AudioContext time (s) when the clip ends. */
+  readonly endTime: number;
+  stop(): void;
+  /** Resolves when the clip ends or is stopped. */
+  readonly ended: Promise<void>;
+}
+
+/**
+ * Voice-clip output provided by the audio engine, so recorded speech goes
+ * through the same master volume, fade (hidden tab / wind-down) and limiter
+ * as everything else, and soft notes duck underneath it.
+ */
+export interface VoiceOutput {
+  /** AudioContext time in seconds, or null before unlock. */
+  currentTime(): number | null;
+  /** Decode an encoded clip (mp3); null before unlock or on failure. Never throws. */
+  decodeAudio(data: ArrayBuffer): Promise<AudioBuffer | null>;
+  /** Play a decoded clip at context time `when` (default: now). Null before unlock. */
+  playVoice(buffer: AudioBuffer, when?: number): VoicePlayback | null;
 }
 
 /** Maps physical keys to musical notes and screen positions. */

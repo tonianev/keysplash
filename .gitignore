@@ -4,3 +4,8 @@ dev-dist
 .DS_Store
 *.log
 .claude/
+tools/voice/.venv/
+tools/voice/models/
+tools/voice/units.json
+tools/voice/qa-report.json
+tools/voice/__pycache__/
