@@ -37,6 +37,12 @@ export default defineConfig({
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,woff2,mp3}'],
         navigateFallback: 'index.html',
+        // injectRegister:false turns off the plugin's autoUpdate defaults, so set them here:
+        // a new version activates right away, and src/main.ts reloads into it only when
+        // play is back on the start screen (never in front of a toddler mid-play).
+        skipWaiting: true,
+        clientsClaim: true,
+        cleanupOutdatedCaches: true,
       },
     }),
   ],
