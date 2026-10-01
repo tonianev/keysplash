@@ -18,8 +18,25 @@ export interface VoiceLike {
   readonly localService?: boolean;
 }
 
-const RATE = 0.92;
-const PITCH = 1.15;
+const RATE = 0.88;
+/** A sequence speaks at most this many parts (counting to nine, six rainbow colours). */
+const MAX_SEQUENCE = 12;
+/** Pause between the last counted part and the closing phrase ("three stars!"). */
+const THEN_GAP_MS = 250;
+/** How long after the estimated end a sequence counts as finished. */
+const END_PAD_MS = 400;
+
+/** Timer functions (injectable for tests). */
+export interface SpeechTimers {
+  set(fn: () => void, ms: number): unknown;
+  clear(handle: unknown): void;
+}
+
+const DEFAULT_TIMERS: SpeechTimers = {
+  set: (fn, ms) => setTimeout(fn, ms),
+  clear: (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>),
+};
+const PITCH = 1.08;
 /** A low-priority say within this long of the previous say is dropped (ms). */
 const MIN_GAP_MS = 300;
 /** Safety timeout per utterance: text length × this + SAFETY_PAD_MS. */
@@ -147,11 +164,20 @@ export class WebSpeaker implements Speaker {
   /** After this time a still-"speaking" synth is treated as stuck. */
   private busyUntil = 0;
   private lastSayAt = -Infinity;
+  /** Pending timers of a running sequence (bounded by MAX_SEQUENCE + 2). */
+  private seqTimers: unknown[] = [];
+  private seqActive = false;
+  private readonly timers: SpeechTimers;
 
-  /** `now` is injectable for tests (ms, monotonic). */
-  constructor(synth: SpeechSynthesis | null = defaultSynth(), now: () => number = defaultClock) {
+  /** `now` and `timers` are injectable for tests (ms, monotonic). */
+  constructor(
+    synth: SpeechSynthesis | null = defaultSynth(),
+    now: () => number = defaultClock,
+    timers: SpeechTimers = DEFAULT_TIMERS,
+  ) {
     this.synth = synth ?? null;
     this.now = now;
+    this.timers = timers;
     this.supported = !!this.synth && typeof SpeechSynthesisUtterance !== 'undefined';
     const s = this.synth;
     if (!s) return;
@@ -198,10 +224,43 @@ export class WebSpeaker implements Speaker {
     const now = this.now();
     if (priority === 'high') {
       this.cancel();
-    } else if (now - this.lastSayAt < MIN_GAP_MS || this.isBusy(synth, now)) {
+    } else if (this.seqActive || now - this.lastSayAt < MIN_GAP_MS || this.isBusy(synth, now)) {
       return;
     }
+    this.speakNow(phrase, now);
+  }
+
+  get sequencing(): boolean {
+    return this.seqActive;
+  }
+
+  sequence(parts: string[], stepMs: number, then: string | null = null): void {
+    this.cancel();
+    if (!this.enabled || !this.supported || !this.synth || !Array.isArray(parts)) return;
+    const list = parts.filter((p) => typeof p === 'string' && p.trim()).slice(0, MAX_SEQUENCE);
+    const tail = typeof then === 'string' && then.trim() ? then.trim() : null;
+    if (list.length === 0 && !tail) return;
+    const step = Number.isFinite(stepMs) ? Math.max(0, stepMs) : 0;
+    this.seqActive = true;
+    list.forEach((part, i) => this.schedule(i * step, () => this.speakNow(part.trim(), this.now())));
+    const tailAt = list.length * step + (list.length ? THEN_GAP_MS : 0);
+    let endAt = list.length ? (list.length - 1) * step + list[list.length - 1].length * MS_PER_CHAR : 0;
+    if (tail) {
+      this.schedule(tailAt, () => this.speakNow(tail, this.now()));
+      endAt = tailAt + tail.length * MS_PER_CHAR;
+    }
+    this.schedule(endAt + END_PAD_MS, () => {
+      this.seqActive = false;
+      this.seqTimers = [];
+    });
+  }
+
+  /** Speak right away, cutting off anything still speaking (used by say and sequences). */
+  private speakNow(phrase: string, now: number): void {
+    const synth = this.synth;
+    if (!synth) return;
     try {
+      if (synth.speaking || synth.pending) synth.cancel();
       const utterance = new SpeechSynthesisUtterance(phrase);
       utterance.rate = RATE;
       utterance.pitch = PITCH;
@@ -225,7 +284,14 @@ export class WebSpeaker implements Speaker {
     }
   }
 
+  private schedule(ms: number, fn: () => void): void {
+    this.seqTimers.push(this.timers.set(fn, ms));
+  }
+
   cancel(): void {
+    for (const t of this.seqTimers) this.timers.clear(t);
+    this.seqTimers = [];
+    this.seqActive = false;
     this.current = null;
     this.busyUntil = 0;
     try {

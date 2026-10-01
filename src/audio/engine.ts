@@ -4,8 +4,8 @@
  * Signal flow, built once on the first unlock() (which must come from a user gesture):
  *
  *   sources → envelopes → voice out (level) → panner ─┬─► dry ─────────────────┐
- *                                                     └─► send 18% → reverb ───┴─► master
- *   master (volume², mute) → fade (wind-down) → compressor → ceiling 0.8 → speakers
+ *                                                     └─► send 12% → reverb ───┴─► master
+ *   master (volume², mute) → fade (wind-down) → warmth lowpass → compressor → ceiling 0.8 → speakers
  *
  * Protecting little ears: each voice's level is divided by √(onsets within 40 ms),
  * no more than 18 voices sound at once (the oldest is faded out fast), and a
@@ -28,12 +28,12 @@ const STEAL_FADE = 0.025;
 const ONSET_WINDOW = 0.04;
 const ONSET_CAPACITY = 32;
 /** Per-voice peak at velocity 1, before master volume. Keeps one note near the limiter threshold. */
-const VOICE_LEVEL = 0.16;
-const DEFAULT_VELOCITY = 0.8;
+const VOICE_LEVEL = 0.14;
+const DEFAULT_VELOCITY = 0.55;
 /** Hard pans are harsh on headphones; keep a little of each side. */
 const PAN_WIDTH = 0.8;
-const REVERB_WET = 0.18;
-const REVERB_SECONDS = 1.4;
+const REVERB_WET = 0.12;
+const REVERB_SECONDS = 1.1;
 const VOLUME_RAMP = 0.05;
 const CEILING = 0.8;
 /** Schedule slightly ahead so attacks never start in the past (which would click). */
@@ -49,8 +49,8 @@ const MIDI_MAX = 108;
 
 const PENTATONIC = [0, 2, 4, 7, 9];
 /** Soft bell triad (E5 G5 C6) and the "ta-da" arpeggio (C5 E5 G5 C6), in C; shifted by setRoot(). */
-const CHIME_NOTES = [76, 79, 84];
-const TADA_NOTES = [72, 76, 79, 84];
+/** Gentle master lowpass: keeps everything warm on laptop speakers. */
+const WARMTH_HZ = 6000;
 
 // ---------------------------------------------------------------------------
 // Pure helpers (exported for tests)
@@ -247,91 +247,73 @@ function noise(v: Voice, t: number, stop: number, dest: AudioNode): void {
 }
 
 // ---------------------------------------------------------------------------
-// Timbres (key notes)
+// Timbres (key notes) — v2: soft, warm and quiet under speech
 // ---------------------------------------------------------------------------
 
-/** [frequency ratio, peak, decay as a fraction of the note length] */
-const BELL_PARTIALS: ReadonlyArray<readonly [number, number, number]> = [
-  [1, 0.55, 1],
-  [1.0035, 0.14, 0.85], // slightly detuned twin: slow shimmer
-  [2.0, 0.22, 0.55],
-  [3.0, 0.11, 0.35],
-  [4.16, 0.09, 0.22], // inharmonic "bell" partial
-];
-
-const buildBell: ToneBuilder = (v, t, f, len) => {
-  const attack = 0.004;
+/** Felt piano: round sine body, a quiet triangle partial, a soft hammer thump, gentle lowpass. */
+const buildFelt: ToneBuilder = (v, t, f, len) => {
+  const attack = 0.006;
   const stop = t + attack + len + STOP_PAD;
-  for (let i = 0; i < BELL_PARTIALS.length; i++) {
-    const [ratio, peak, decay] = BELL_PARTIALS[i];
-    if (!audible(v, f * ratio)) continue;
-    osc(v, 'sine', f * ratio, t, stop, envelope(v, t, peak, attack, len * decay, v.out));
-  }
+  const lp = filter(v, 'lowpass', 2400, 0.4, v.out);
+  osc(v, 'sine', f, t, stop, envelope(v, t, 0.7, attack, len, lp));
+  osc(v, 'triangle', f * 2, t, t + len * 0.5 + STOP_PAD, envelope(v, t, 0.12, attack, len * 0.45, lp));
+  const thump = envelope(v, t, 0.12, 0.002, 0.03, v.out);
+  noise(v, t, t + 0.05, filter(v, 'lowpass', 900, 0.7, thump));
   return t + attack + len;
 };
 
+/** Warm wooden marimba: sine + a brief 4th partial, a soft mallet. */
 const buildMarimba: ToneBuilder = (v, t, f, len) => {
-  const attack = 0.003;
+  const attack = 0.004;
   const stop = t + attack + len + STOP_PAD;
   osc(v, 'sine', f, t, stop, envelope(v, t, 0.75, attack, len, v.out));
   if (audible(v, f * 3.93)) {
-    const bright = Math.min(0.09, len * 0.15);
-    osc(v, 'sine', f * 3.93, t, t + bright + STOP_PAD, envelope(v, t, 0.28, 0.002, bright, v.out));
+    const bright = Math.min(0.06, len * 0.1);
+    osc(v, 'sine', f * 3.93, t, t + bright + STOP_PAD, envelope(v, t, 0.12, 0.002, bright, v.out));
   }
-  // Soft mallet: a 25 ms puff of band-passed noise.
-  const click = envelope(v, t, 0.3, 0.001, 0.025, v.out);
-  noise(v, t, t + 0.05, filter(v, 'bandpass', clamp(f * 5.5, 1500, 7000), 1.4, click));
+  const click = envelope(v, t, 0.1, 0.001, 0.02, v.out);
+  noise(v, t, t + 0.04, filter(v, 'bandpass', clamp(f * 4, 800, 3000), 1.2, click));
   return t + attack + len;
 };
 
-const buildPluck: ToneBuilder = (v, t, f, len) => {
+/** Soft kalimba tine: sine + a quiet octave, a muted metallic touch. */
+const buildKalimba: ToneBuilder = (v, t, f, len) => {
   const attack = 0.003;
   const stop = t + attack + len + STOP_PAD;
+  osc(v, 'sine', f, t, stop, envelope(v, t, 0.65, attack, len, v.out));
+  if (audible(v, f * 2.006)) osc(v, 'sine', f * 2.006, t, stop, envelope(v, t, 0.12, attack, len * 0.4, v.out));
+  if (audible(v, f * 5.95)) osc(v, 'sine', f * 5.95, t, t + 0.06, envelope(v, t, 0.06, 0.001, 0.03, v.out));
+  return t + attack + len;
+};
+
+/** Celesta: a soft bell — sine with a low 4th partial, lowpassed so it never gets bright. */
+const buildCelesta: ToneBuilder = (v, t, f, len) => {
+  const attack = 0.004;
+  const stop = t + attack + len + STOP_PAD;
+  const lp = filter(v, 'lowpass', 3000, 0.4, v.out);
+  osc(v, 'sine', f, t, stop, envelope(v, t, 0.65, attack, len, lp));
+  if (audible(v, f * 4)) osc(v, 'sine', f * 4, t, t + len * 0.3 + STOP_PAD, envelope(v, t, 0.06, attack, len * 0.25, lp));
+  if (audible(v, f * 2)) osc(v, 'sine', f * 2, t, t + len * 0.6 + STOP_PAD, envelope(v, t, 0.1, attack, len * 0.5, lp));
+  return t + attack + len;
+};
+
+/** Gentle harp pluck: triangle through a closing lowpass. */
+const buildHarp: ToneBuilder = (v, t, f, len) => {
+  const attack = 0.004;
+  const stop = t + attack + len + STOP_PAD;
   const env = envelope(v, t, 0.6, attack, len, v.out);
-  // Bright at the pluck, then the lowpass closes fast like a damped string.
-  const lp = filter(v, 'lowpass', f * 12, 1.5, env);
-  lp.frequency.setValueAtTime(hz(v, f * 12), t);
-  lp.frequency.exponentialRampToValueAtTime(hz(v, Math.max(f * 1.4, 150)), t + 0.25);
+  const lp = filter(v, 'lowpass', f * 6, 0.6, env);
+  lp.frequency.setValueAtTime(hz(v, Math.min(f * 6, 4000)), t);
+  lp.frequency.exponentialRampToValueAtTime(hz(v, Math.max(f * 1.5, 200)), t + 0.35);
   osc(v, 'triangle', f, t, stop, lp);
-  const saw = osc(v, 'sawtooth', f, t, stop, gain(v, 0.35, lp));
-  saw.detune.value = 5;
   return t + attack + len;
 };
 
-/** A sine that rises ×0.7 → ×1.15 in 70 ms, then settles on pitch: a round "bloop". */
-function bloop(v: Voice, f: number, t: number, stop: number, dest: AudioNode): void {
-  const o = osc(v, 'sine', f * 0.7, t, stop, dest);
-  o.frequency.exponentialRampToValueAtTime(f * 1.15, t + 0.07);
-  o.frequency.setTargetAtTime(f, t + 0.07, 0.05);
-}
-
-const buildBubble: ToneBuilder = (v, t, f, len) => {
-  const attack = 0.006;
-  bloop(v, f, t, t + attack + len + STOP_PAD, envelope(v, t, 0.8, attack, len, v.out));
-  if (audible(v, f * 2.3)) {
-    const body = len * 0.35;
-    bloop(v, f * 2, t, t + body + STOP_PAD, envelope(v, t, 0.16, 0.004, body, v.out));
-  }
-  return t + attack + len;
-};
-
-const buildKalimba: ToneBuilder = (v, t, f, len) => {
-  const attack = 0.002;
-  const stop = t + attack + len + STOP_PAD;
-  osc(v, 'sine', f, t, stop, envelope(v, t, 0.6, attack, len, v.out));
-  if (audible(v, f * 2.006)) {
-    osc(v, 'sine', f * 2.006, t, stop, envelope(v, t, 0.17, attack, len * 0.45, v.out));
-  }
-  // Metallic tine: two short inharmonic partials.
-  if (audible(v, f * 5.95)) osc(v, 'sine', f * 5.95, t, t + 0.1, envelope(v, t, 0.2, 0.001, 0.045, v.out));
-  if (audible(v, f * 8.2)) osc(v, 'sine', f * 8.2, t, t + 0.08, envelope(v, t, 0.08, 0.001, 0.025, v.out));
-  return t + attack + len;
-};
-
+/** Warm pad-like tone for bedtime: two slightly detuned triangles, slow attack. */
 const buildSoft: ToneBuilder = (v, t, f, len) => {
-  const attack = 0.07;
+  const attack = 0.09;
   const stop = t + attack + len + STOP_PAD;
-  const lp = filter(v, 'lowpass', 1800, 0.5, envelope(v, t, 0.75, attack, len, v.out));
+  const lp = filter(v, 'lowpass', 1600, 0.5, envelope(v, t, 0.7, attack, len, v.out));
   osc(v, 'triangle', f, t, stop, lp);
   const twin = osc(v, 'triangle', f, t, stop, gain(v, 0.35, lp));
   twin.detune.value = 6;
@@ -347,104 +329,60 @@ interface TimbreSpec {
 }
 
 const TIMBRES: Record<Timbre, TimbreSpec> = {
-  bell: { length: 1.6, gain: 1, build: buildBell },
-  marimba: { length: 0.7, gain: 1.05, build: buildMarimba },
-  pluck: { length: 0.9, gain: 1, build: buildPluck },
-  bubble: { length: 0.35, gain: 1.05, build: buildBubble },
-  kalimba: { length: 1.3, gain: 1.05, build: buildKalimba },
-  soft: { length: 1.6, gain: 0.75, build: buildSoft },
+  felt: { length: 1.4, gain: 1, build: buildFelt },
+  marimba: { length: 0.8, gain: 1, build: buildMarimba },
+  kalimba: { length: 1.2, gain: 1, build: buildKalimba },
+  celesta: { length: 1.3, gain: 1, build: buildCelesta },
+  harp: { length: 1.1, gain: 1.05, build: buildHarp },
+  soft: { length: 1.6, gain: 0.8, build: buildSoft },
 };
 
 // ---------------------------------------------------------------------------
-// Sound effects
+// Sound effects — quiet and warm; nothing cartoonish, nothing that says "wrong"
 // ---------------------------------------------------------------------------
 
+/** Soft wooden tick. */
+const buildTap: EffectBuilder = (v, t) => {
+  const body = osc(v, 'sine', 520, t, t + 0.08, envelope(v, t, 0.5, 0.002, 0.06, v.out));
+  body.frequency.exponentialRampToValueAtTime(360, t + 0.05);
+  const tick = envelope(v, t, 0.12, 0.001, 0.012, v.out);
+  noise(v, t, t + 0.03, filter(v, 'bandpass', 1800, 1.1, tick));
+  return t + 0.062;
+};
+
+/** Soft round pop. */
 const buildPop: EffectBuilder = (v, t) => {
-  const o = osc(v, 'sine', 900, t, t + 0.12, envelope(v, t, 0.8, 0.002, 0.09, v.out));
-  o.frequency.exponentialRampToValueAtTime(180, t + 0.07);
-  const click = envelope(v, t, 0.22, 0.001, 0.012, v.out);
-  noise(v, t, t + 0.04, filter(v, 'bandpass', 2400, 0.9, click));
-  return t + 0.092;
+  const o = osc(v, 'sine', 620, t, t + 0.12, envelope(v, t, 0.6, 0.003, 0.09, v.out));
+  o.frequency.exponentialRampToValueAtTime(240, t + 0.08);
+  return t + 0.093;
 };
 
-const buildBubbleFx: EffectBuilder = (v, t) => {
-  const o = osc(v, 'sine', 300, t, t + 0.2, envelope(v, t, 0.75, 0.005, 0.16, v.out));
-  o.frequency.exponentialRampToValueAtTime(900, t + 0.12);
-  return t + 0.165;
-};
-
-const buildBoing: EffectBuilder = (v, t) => {
-  const len = 0.45;
-  const stop = t + len + STOP_PAD;
-  const o = osc(v, 'sine', 240, t, stop, envelope(v, t, 0.8, 0.004, len, v.out));
-  o.frequency.exponentialRampToValueAtTime(205, t + len);
-  // Springy vibrato: wide and slow at first, narrowing and quickening as it settles.
-  const depth = v.ctx.createGain();
-  depth.gain.value = 60;
-  depth.gain.setValueAtTime(60, t);
-  depth.connect(o.frequency);
-  v.nodes.push(depth);
-  depth.gain.exponentialRampToValueAtTime(2, t + len);
-  const lfo = osc(v, 'sine', 9, t, stop, depth);
-  lfo.frequency.linearRampToValueAtTime(15, t + len);
-  return t + 0.004 + len;
-};
-
-function sweep(v: Voice, t: number, from: number, to: number, q: number, attack: number, decay: number, peak: number): number {
-  const len = attack + decay;
-  const bp = filter(v, 'bandpass', from, q, envelope(v, t, peak, attack, decay, v.out));
-  bp.frequency.setValueAtTime(hz(v, from), t);
-  bp.frequency.exponentialRampToValueAtTime(hz(v, to), t + len);
+/** Airy page turn. */
+const buildSwipe: EffectBuilder = (v, t) => {
+  const len = 0.35;
+  const env = envelope(v, t, 0.5, 0.12, len - 0.12, v.out);
+  const bp = filter(v, 'bandpass', 500, 0.8, filter(v, 'lowpass', 3500, 0.5, env));
+  bp.frequency.setValueAtTime(hz(v, 500), t);
+  bp.frequency.exponentialRampToValueAtTime(hz(v, 1800), t + len);
   noise(v, t, t + len + STOP_PAD, bp);
   return t + len;
-}
-
-const buildWhoosh: EffectBuilder = (v, t) => sweep(v, t, 300, 2500, 1.3, 0.2, 0.4, 0.9);
-const buildSwoosh: EffectBuilder = (v, t) => sweep(v, t, 800, 5000, 1.6, 0.07, 0.23, 0.85);
-
-/** A quick rising run of 4–6 high pentatonic blips over ~0.3 s. */
-const buildSparkle: EffectBuilder = (v, t, shift) => {
-  const count = 4 + Math.floor(Math.random() * 3);
-  const spacing = 0.3 / count;
-  let step = Math.floor(Math.random() * 3);
-  let end = t;
-  for (let i = 0; i < count; i++, step++) {
-    const at = t + i * spacing;
-    const f = hz(v, midiToFrequency(84 + shift + pentatonicOffset(step)));
-    osc(v, 'sine', f, at, at + 0.16 + STOP_PAD, envelope(v, at, 0.32, 0.002, 0.16, v.out));
-    end = at + 0.162;
-  }
-  return end;
 };
 
-const buildThud: EffectBuilder = (v, t) => {
-  const low = osc(v, 'sine', 140, t, t + 0.25, envelope(v, t, 0.85, 0.004, 0.22, v.out));
-  low.frequency.exponentialRampToValueAtTime(90, t + 0.05);
-  // An octave above so it is still heard on small laptop speakers.
-  const body = osc(v, 'sine', 280, t, t + 0.14, envelope(v, t, 0.28, 0.004, 0.1, v.out));
-  body.frequency.exponentialRampToValueAtTime(180, t + 0.05);
-  return t + 0.224;
-};
-
-const buildTwinkle: EffectBuilder = (v, t, shift) => {
-  // Scale degrees 2..6 above C6 (E6…D7 before the key shift).
-  const f = hz(v, midiToFrequency(84 + shift + pentatonicOffset(2 + Math.floor(Math.random() * 5))));
-  osc(v, 'sine', f, t, t + 0.25 + STOP_PAD, envelope(v, t, 0.5, 0.003, 0.25, v.out));
-  if (audible(v, f * 2)) osc(v, 'sine', f * 2, t, t + 0.12, envelope(v, t, 0.1, 0.002, 0.08, v.out));
-  return t + 0.253;
-};
-
-type SingleVoiceEffect = Exclude<SoundEffect, 'chime' | 'tada'>;
+type SingleVoiceEffect = 'tap' | 'pop' | 'swipe';
 
 const EFFECTS: Record<SingleVoiceEffect, { gain: number; build: EffectBuilder }> = {
-  pop: { gain: 1, build: buildPop },
-  bubble: { gain: 0.9, build: buildBubbleFx },
-  boing: { gain: 0.9, build: buildBoing },
-  whoosh: { gain: 1.3, build: buildWhoosh },
-  swoosh: { gain: 1.1, build: buildSwoosh },
-  sparkle: { gain: 0.9, build: buildSparkle },
-  thud: { gain: 1.2, build: buildThud },
-  twinkle: { gain: 0.45, build: buildTwinkle },
+  tap: { gain: 0.7, build: buildTap },
+  pop: { gain: 0.8, build: buildPop },
+  swipe: { gain: 0.9, build: buildSwipe },
+};
+
+/** Melodic effects as [pentatonic step, delay s, trim] in the world's key above C5. */
+const PHRASES: Record<'chime' | 'success' | 'retry' | 'complete', ReadonlyArray<readonly [number, number, number]>> = {
+  chime: [[2, 0, 0.5], [4, 0.09, 0.5]],
+  success: [[0, 0, 0.6], [2, 0.11, 0.6], [4, 0.22, 0.7]],
+  // Curious and kind: two soft notes rising a step — never a buzzer.
+  retry: [[1, 0, 0.4], [2, 0.16, 0.4]],
+  complete: [[0, 0, 0.6], [2, 0.1, 0.6], [4, 0.2, 0.6], [5, 0.3, 0.65], [7, 0.42, 0.7]],
 };
 
 function has<K extends string>(record: Record<K, unknown>, key: string): key is K {
@@ -516,7 +454,7 @@ export class WebAudioEngine implements AudioEngine {
   private volume = 0.8;
   private muted = false;
   private fadeLevel = 1;
-  private timbre: Timbre = 'bell';
+  private timbre: Timbre = 'felt';
   /** Key shift for melodic effects (see keyShift); 0 = C. */
   private shift = 0;
   /** In-flight resume wait shared by repeated unlock() calls. */
@@ -612,11 +550,14 @@ export class WebAudioEngine implements AudioEngine {
   effect(name: SoundEffect, options: NoteOptions = NO_OPTIONS): void {
     if (!this.live()) return;
     const opts = options ?? NO_OPTIONS;
-    if (name === 'chime') {
-      for (let i = 0; i < CHIME_NOTES.length; i++) this.play(CHIME_NOTES[i] + this.shift, 'bell', opts, i * 0.03, 0.55);
-    } else if (name === 'tada') {
-      for (let i = 0; i < TADA_NOTES.length; i++) this.play(TADA_NOTES[i] + this.shift, this.timbre, opts, i * 0.08, 0.8);
-      this.playEffect('sparkle', opts, TADA_NOTES.length * 0.08, 0.6);
+    if (name === 'count') {
+      const step = isFiniteNumber(opts.step) ? clamp(Math.round(opts.step), 0, 12) : 0;
+      this.play(72 + this.shift + pentatonicOffset(step), 'celesta', opts, 0, 0.55);
+    } else if (typeof name === 'string' && has(PHRASES, name)) {
+      const timbre: Timbre = name === 'retry' ? 'soft' : name === 'chime' ? 'celesta' : this.timbre;
+      for (const [step, delay, trim] of PHRASES[name]) {
+        this.play(72 + this.shift + pentatonicOffset(step), timbre, opts, delay, trim);
+      }
     } else if (typeof name === 'string' && has(EFFECTS, name)) {
       this.playEffect(name, opts, 0, 1);
     }
@@ -805,9 +746,16 @@ export class WebAudioEngine implements AudioEngine {
     limiter.release.value = 0.25;
     limiter.connect(ceiling);
 
+    // Gentle master lowpass so nothing ever sounds bright or harsh.
+    const warmth = ctx.createBiquadFilter();
+    warmth.type = 'lowpass';
+    warmth.frequency.value = WARMTH_HZ;
+    warmth.Q.value = 0.5;
+    warmth.connect(limiter);
+
     const fade = ctx.createGain();
     fade.gain.value = this.fadeLevel;
-    fade.connect(limiter);
+    fade.connect(warmth);
 
     const master = ctx.createGain();
     master.gain.value = this.muted ? 0 : volumeToGain(this.volume);
