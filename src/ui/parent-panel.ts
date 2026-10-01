@@ -1,9 +1,9 @@
-import type { LockStatus, ParentPanel, ParentPanelDeps, Settings } from '../types';
+import type { LearningProgress, LockStatus, ParentPanel, ParentPanelDeps, Settings } from '../types';
 
 /** Settings keys whose value is a boolean (rendered as switches). */
 type BoolKey = { [K in keyof Settings]: Settings[K] extends boolean ? K : never }[keyof Settings];
 /** Settings keys rendered as pill groups. */
-type ChoiceKey = 'speech' | 'letterCase' | 'size' | 'intensity' | 'motion';
+type ChoiceKey = 'mode' | 'layout' | 'speech' | 'letterCase' | 'size' | 'intensity' | 'motion';
 type Choices<K extends ChoiceKey> = ReadonlyArray<readonly [Settings[K], string]>;
 
 const SECRET_WORD = /^[a-z]{4,16}$/;
@@ -19,9 +19,9 @@ const FOCUSABLE =
 
 const LOGO_SVG =
   '<svg viewBox="0 0 64 64" aria-hidden="true" focusable="false">' +
-  '<rect x="6" y="10" width="52" height="48" rx="13" fill="#d94848"/>' +
-  '<rect x="10" y="8" width="44" height="42" rx="11" fill="#ff6b6b"/>' +
-  '<path d="M24 19v20M38 19 26.5 29.5M30 27l9 12" fill="none" stroke="#fff" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>' +
+  '<rect x="4" y="4" width="56" height="56" rx="16" fill="#4A86D8"/>' +
+  '<rect x="13" y="12" width="38" height="38" rx="10" fill="#FBF7F0"/>' +
+  '<path d="M26 21v20M38 21 28.5 30.5M31 28.5l8 12.5" fill="none" stroke="#E0604F" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/>' +
   '</svg>';
 
 const STATUS_ITEMS: ReadonlyArray<readonly [keyof LockStatus, string, string | null]> = [
@@ -84,6 +84,12 @@ export class DomParentPanel implements ParentPanel {
   private statKeys!: HTMLElement;
   private statTaps!: HTMLElement;
   private statSmashes!: HTMLElement;
+  private statFound!: HTMLElement;
+  private statSpelled!: HTMLElement;
+  private progressGrid!: HTMLElement;
+  private progressWords!: HTMLElement;
+  private progressSince!: HTMLElement;
+  private progressConfirm!: HTMLElement;
   private statTime!: HTMLElement;
   private topKeys!: HTMLElement;
   private installButton!: HTMLButtonElement;
@@ -113,10 +119,12 @@ export class DomParentPanel implements ParentPanel {
 
     this.body = el('div', 'ks-panel__body');
     this.body.append(
+      this.buildLearningSection(),
       this.buildWorldSection(),
       this.buildSoundSection(),
       this.buildLookSection(),
       this.buildChildSection(),
+      this.buildProgressSection(),
       this.buildSafetySection(),
       this.buildSessionSection(),
     );
@@ -130,6 +138,9 @@ export class DomParentPanel implements ParentPanel {
         if (this.opened) this.refreshSettings(next);
       }),
       deps.speaker.onVoicesChanged(() => this.renderVoices(this.deps.store.get())),
+      deps.progress.subscribe((progress) => {
+        if (this.opened) this.renderProgress(progress);
+      }),
     );
   }
 
@@ -270,6 +281,8 @@ export class DomParentPanel implements ParentPanel {
     this.setSecretError(false);
     this.secretSaved.textContent = '';
     this.refreshStats();
+    this.renderProgress(this.deps.progress.get());
+    this.progressConfirm.hidden = true;
     this.refreshLive();
   }
 
@@ -294,6 +307,8 @@ export class DomParentPanel implements ParentPanel {
     this.statKeys.textContent = stats.keys.toLocaleString();
     this.statTaps.textContent = stats.taps.toLocaleString();
     this.statSmashes.textContent = stats.smashes.toLocaleString();
+    this.statFound.textContent = stats.found.toLocaleString();
+    this.statSpelled.textContent = stats.spelled.toLocaleString();
     this.statTime.textContent = formatDuration(stats.playMs);
     this.topKeys.replaceChildren();
     if (stats.topKeys.length === 0) {
@@ -538,14 +553,38 @@ export class DomParentPanel implements ParentPanel {
       'Sound',
       this.row(volumeId, 'Volume', volumeBox, 'Peaks are always limited to protect little ears.'),
       this.switchRow('muted', 'Mute'),
-      this.switchRow('notes', 'Musical notes', 'Each key plays its own note. Off: soft sound effects only.'),
-      this.choiceRow('speech', 'Speech', [
-        ['off', 'Off'],
-        ['letter', 'Letters'],
-        ['word', 'Words'],
-      ], 'Letters says “A”. Words says “A… apple!”'),
+      this.switchRow('notes', 'Soft notes', 'Each key plays its own gentle note under the voice. Off: a quiet tap instead.'),
       this.row(voiceId, 'Voice', this.voiceSelect, voiceDesc),
       testRow,
+    );
+  }
+
+  private buildLearningSection(): HTMLElement {
+    return this.section(
+      'learning',
+      '🎓',
+      'Learning',
+      this.choiceRow('mode', 'Activity', [
+        ['explore', 'Explore'],
+        ['find-letters', 'Find letters'],
+        ['find-numbers', 'Find numbers'],
+        ['spell', 'Spell'],
+      ], 'Explore is free play (ages 1+). Find letters and Find numbers ask for one key at a time (3+). Spell builds short picture words (4+). Nobody ever loses.'),
+      this.choiceRow('layout', 'Cards', [
+        ['focus', 'One card'],
+        ['keyboard', 'Where the key is'],
+      ], 'One card shows a single big flashcard with recent ones on a shelf. Where the key is places cards where each key sits on the keyboard.'),
+      this.choiceRow('speech', 'Voice says', [
+        ['off', 'Nothing'],
+        ['letter', 'Letter'],
+        ['word', 'Letter + word'],
+      ], 'Letter says “bee”. Letter + word says “bee… bee is for ball”. Numbers are always counted out loud unless the voice is off.'),
+      this.choiceRow('letterCase', 'Letters', [
+        ['upper', 'ABC'],
+        ['lower', 'abc'],
+        ['both', 'Aa'],
+      ], 'Aa shows capital and small letters together.'),
+      this.switchRow('pictures', 'Pictures', 'Letters bring a picture, like B with a ball ⚽.'),
     );
   }
 
@@ -553,31 +592,24 @@ export class DomParentPanel implements ParentPanel {
     return this.section(
       'look',
       '🎨',
-      'Look & feel',
-      this.choiceRow('letterCase', 'Letter case', [
-        ['upper', 'ABC'],
-        ['lower', 'abc'],
-        ['both', 'Aa'],
-      ]),
-      this.switchRow('pictures', 'Pictures', 'Letters bring a picture along, like A with an apple 🍎.'),
-      this.choiceRow('size', 'Size', [
+      'Look & motion',
+      this.choiceRow('size', 'Card size', [
         ['normal', 'Normal'],
         ['big', 'Big'],
         ['huge', 'Huge'],
       ]),
-      this.choiceRow('intensity', 'Intensity', [
+      this.choiceRow('intensity', 'Liveliness', [
         ['calm', 'Calm'],
         ['normal', 'Normal'],
-        ['wild', 'Wild'],
-      ], 'How busy the screen gets and how big the bursts are.'),
+        ['lively', 'Lively'],
+      ], 'How much confetti and how many cards at once.'),
       this.choiceRow('motion', 'Motion', [
         ['system', 'System'],
         ['reduce', 'Reduce'],
         ['full', 'Full'],
       ], 'System follows your device’s Reduce Motion setting.'),
-      this.switchRow('trails', 'Sparkle trails', 'Sparkles follow the mouse or finger.'),
-      this.switchRow('faces', 'Cute faces', 'Shapes get friendly blinking faces.'),
-      this.switchRow('spatialKeys', 'Keys where they are', 'Each letter pops up where its key sits: left keys on the left, right keys on the right.'),
+      this.switchRow('trails', 'Painting', 'Drag a finger or the mouse to paint soft strokes.'),
+      this.switchRow('faces', 'Shape faces', 'Tapped shapes get simple friendly faces.'),
     );
   }
 
@@ -635,6 +667,69 @@ export class DomParentPanel implements ParentPanel {
         'When time is up, sounds and colours wind down gently for about 45 seconds, then a sleepy “All done!” screen appears. Only a grown-up can continue.',
       ),
     );
+  }
+
+  private buildProgressSection(): HTMLElement {
+    const intro = el('p', 'ks-note', 'What your child has met so far, on this device only. Tinted: seen in play. Filled: found in a game.');
+    this.progressGrid = el('ul', 'ks-progress');
+    this.progressGrid.setAttribute('aria-label', 'Letters and numbers');
+    for (const symbol of [...'ABCDEFGHIJKLMNOPQRSTUVWXYZ', ...'0123456789']) {
+      const cell = el('li', 'ks-progress__cell', symbol);
+      cell.dataset.symbol = symbol;
+      cell.dataset.state = 'none';
+      this.progressGrid.append(cell);
+    }
+    const wordsLabel = el('p', 'ks-topkeys__title', 'Words spelled');
+    wordsLabel.id = this.id('words');
+    this.progressWords = el('ul', 'ks-topkeys');
+    this.progressWords.setAttribute('aria-labelledby', wordsLabel.id);
+    this.progressSince = el('p', 'ks-row__desc');
+
+    this.progressConfirm = el('div', 'ks-confirm');
+    this.progressConfirm.hidden = true;
+    const yes = button('ks-btn ks-btn--secondary', 'Yes, reset', () => {
+      this.deps.actions.resetProgress();
+      this.progressConfirm.hidden = true;
+      this.renderProgress(this.deps.progress.get());
+    });
+    yes.dataset.action = 'reset-progress-confirm';
+    const no = button('ks-btn ks-btn--ghost', 'Cancel', () => {
+      this.progressConfirm.hidden = true;
+    });
+    this.progressConfirm.append(el('span', 'ks-confirm__text', 'Clear all progress?'), no, yes);
+    const reset = button('ks-btn ks-btn--ghost', 'Reset progress', () => {
+      this.progressConfirm.hidden = false;
+    });
+    reset.dataset.action = 'reset-progress';
+    const resetRow = el('div', 'ks-row ks-row--end');
+    resetRow.append(this.progressSince, reset);
+
+    return this.section('progress', '🌱', 'Progress', intro, this.progressGrid, wordsLabel, this.progressWords, resetRow, this.progressConfirm);
+  }
+
+  private renderProgress(progress: LearningProgress): void {
+    for (const cell of this.progressGrid.children) {
+      const symbol = (cell as HTMLElement).dataset.symbol ?? '';
+      const found = progress.found[symbol] ?? 0;
+      const seen = progress.seen[symbol] ?? 0;
+      const state = found > 0 ? 'found' : seen > 0 ? 'seen' : 'none';
+      (cell as HTMLElement).dataset.state = state;
+      cell.setAttribute('aria-label', `${symbol}: ${state === 'found' ? `found ${found}×` : state === 'seen' ? `seen ${seen}×` : 'not yet'}`);
+    }
+    const words = Object.entries(progress.spelled).sort((a, b) => b[1] - a[1]);
+    this.progressWords.replaceChildren();
+    if (words.length === 0) {
+      this.progressWords.append(el('li', 'ks-topkeys__empty', 'None yet. Try the Spell activity.'));
+    } else {
+      words.slice(0, 24).forEach(([word, count], i) => {
+        const chip = el('li', `ks-topkey ks-topkey--${i % 5}`);
+        chip.append(el('span', 'ks-topkey__key', word), el('span', 'ks-topkey__count', `×${count}`));
+        this.progressWords.append(chip);
+      });
+    }
+    this.progressSince.textContent = progress.since
+      ? `Since ${new Date(progress.since).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`
+      : '';
   }
 
   private buildSafetySection(): HTMLElement {
@@ -723,6 +818,8 @@ export class DomParentPanel implements ParentPanel {
     };
     this.statKeys = stat('Keys');
     this.statTaps = stat('Taps');
+    this.statFound = stat('Found');
+    this.statSpelled = stat('Words spelled');
     this.statSmashes = stat('Smashes');
     this.statTime = stat('Play time');
 

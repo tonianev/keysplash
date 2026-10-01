@@ -112,9 +112,14 @@ export class DomOverlays implements Overlays {
     const card = el('div', 'ks-alldone__card');
     const moon = el('div', 'ks-alldone__moon');
     moon.setAttribute('aria-hidden', 'true');
-    moon.append(el('span', 'ks-alldone__moon-glyph', '🌙'));
+    // A flat crescent: a disc with a night-coloured disc over it (no emoji, no glow).
+    moon.insertAdjacentHTML(
+      'beforeend',
+      '<svg class="ks-alldone__moon-glyph" viewBox="0 0 100 100" aria-hidden="true" focusable="false">' +
+        '<circle cx="46" cy="52" r="34" fill="#F1E3B5"/><circle cx="62" cy="42" r="29" fill="var(--ks-night-card)"/></svg>',
+    );
     for (let i = 1; i <= 3; i++) moon.append(el('span', `ks-z ks-z--${i}`, 'z'));
-    card.append(moon, el('h2', 'ks-alldone__title', 'All done!'), el('p', 'ks-alldone__sub', 'Time for a break 💛'));
+    card.append(moon, el('h2', 'ks-alldone__title', 'All done!'), el('p', 'ks-alldone__sub', 'Time for a break.'));
 
     this.holdButton = el('button', 'ks-hold');
     this.holdButton.type = 'button';
@@ -142,9 +147,7 @@ export class DomOverlays implements Overlays {
     this.resume.tabIndex = -1;
     const play = el('div', 'ks-resume__play');
     play.innerHTML = PLAY_SVG;
-    const hand = el('div', 'ks-resume__hand', '👆');
-    hand.setAttribute('aria-hidden', 'true');
-    this.resume.append(play, hand);
+    this.resume.append(play);
     this.resume.addEventListener('click', this.onResumeGesture);
     this.resumeFade = new Fade(this.resume);
 

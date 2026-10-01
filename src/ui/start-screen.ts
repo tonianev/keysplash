@@ -1,4 +1,12 @@
-import type { Settings, StartScreen, StartScreenDeps, WorldId } from '../types';
+import type { PlayMode, Settings, StartScreen, StartScreenDeps, WorldId } from '../types';
+
+/** The four activities, as shown on the start screen. */
+const MODES: ReadonlyArray<{ id: PlayMode; icon: string; title: string; age: string; desc: string }> = [
+  { id: 'explore', icon: '🔤', title: 'Explore', age: '1+', desc: 'Letters, numbers, shapes & colours' },
+  { id: 'find-letters', icon: '🔎', title: 'Find letters', age: '3+', desc: 'Find the letter on the keyboard' },
+  { id: 'find-numbers', icon: '🔢', title: 'Find numbers', age: '3+', desc: 'Find the number on the keyboard' },
+  { id: 'spell', icon: '✏️', title: 'Spell', age: '4+', desc: 'Build short picture words' },
+];
 
 const TITLE = 'KeySplash';
 /** Matches the CSS fade duration; after it the element gets `hidden`. */
@@ -39,8 +47,8 @@ function isEditable(target: EventTarget | null): boolean {
 }
 
 /**
- * The first screen: big bouncy title, a giant Play button, a quick world picker
- * and a footnote telling grown-ups how to get back to the controls.
+ * The first screen: a calm wordmark, the activity cards, a Start button, a
+ * quick world picker and a footnote telling grown-ups how to reach the controls.
  *
  * It is visible right after construction (calling show() again is harmless).
  * Any key except bare modifiers / Tab / Escape, a click on Play, or a click on
@@ -54,6 +62,7 @@ export class DomStartScreen implements StartScreen {
   private readonly picker: HTMLElement;
   private readonly worldButtons = new Map<WorldId, HTMLButtonElement>();
   private readonly worldName: HTMLElement;
+  private readonly modeButtons = new Map<PlayMode, HTMLButtonElement>();
   private readonly secretWordEl: HTMLElement;
   private readonly unsubscribe: () => void;
 
@@ -83,12 +92,13 @@ export class DomStartScreen implements StartScreen {
       title.append(letter);
     });
 
-    const subtitle = el('p', 'ks-start__subtitle', 'Hand over the keyboard. Every key makes magic.');
+    const subtitle = el('p', 'ks-start__subtitle', 'Every key teaches something new.');
 
     this.play = el('button', 'ks-play');
     this.play.type = 'button';
-    this.play.setAttribute('aria-label', 'Play');
+    this.play.setAttribute('aria-label', 'Start');
     this.play.innerHTML = PLAY_SVG;
+    this.play.append(el('span', 'ks-play__label', 'Start'));
 
     const hint = el('p', 'ks-start__hint', 'or press any key');
 
@@ -115,7 +125,28 @@ export class DomStartScreen implements StartScreen {
     this.worldName.dataset.noStart = '';
     this.worldName.setAttribute('aria-hidden', 'true'); // the radios already announce it
 
-    main.append(this.greeting, title, subtitle, this.play, hint, this.picker, this.worldName);
+    const modes = el('div', 'ks-modes');
+    modes.setAttribute('role', 'radiogroup');
+    modes.setAttribute('aria-label', 'Choose an activity');
+    modes.dataset.noStart = '';
+    for (const mode of MODES) {
+      const card = el('button', 'ks-mode');
+      card.type = 'button';
+      card.setAttribute('role', 'radio');
+      card.dataset.mode = mode.id;
+      const icon = el('span', 'ks-mode__icon', mode.icon);
+      icon.setAttribute('aria-hidden', 'true');
+      const head = el('span', 'ks-mode__head');
+      head.append(el('span', 'ks-mode__title', mode.title), el('span', 'ks-mode__age', mode.age));
+      card.append(icon, head, el('span', 'ks-mode__desc', mode.desc));
+      card.addEventListener('click', () => {
+        if (this.deps.store.get().mode !== mode.id) this.deps.store.update({ mode: mode.id });
+      });
+      modes.append(card);
+      this.modeButtons.set(mode.id, card);
+    }
+
+    main.append(this.greeting, title, subtitle, modes, this.play, hint, this.picker, this.worldName);
 
     // Grown-up footnote.
     const foot = el('footer', 'ks-start__foot');
@@ -125,8 +156,8 @@ export class DomStartScreen implements StartScreen {
     how.append('Grown-ups: while playing, type ', this.secretWordEl, ' or hold the top-left corner to open the controls.');
     const tips = el('ul', 'ks-tips');
     tips.append(
-      el('li', undefined, 'Install KeySplash as an app for the cleanest fullscreen.'),
-      el('li', undefined, 'Chrome and Edge also lock Escape and most shortcuts while fullscreen.'),
+      el('li', undefined, 'Works offline. Nothing leaves this device.'),
+      el('li', undefined, 'Chrome and Edge lock Escape and most shortcuts in fullscreen.'),
       el('li', undefined, 'On a Mac, turn on Chrome ▸ “Warn Before Quitting”.'),
     );
     foot.append(how);
@@ -189,6 +220,11 @@ export class DomStartScreen implements StartScreen {
     this.greeting.textContent = name ? `Hi, ${name}!` : '';
     this.secretWordEl.textContent = settings.secretWord;
     this.worldName.textContent = this.deps.worlds.find((w) => w.id === settings.world)?.label ?? '';
+    for (const [id, card] of this.modeButtons) {
+      const selected = id === settings.mode;
+      card.setAttribute('aria-checked', String(selected));
+      card.classList.toggle('is-selected', selected);
+    }
     for (const [id, button] of this.worldButtons) {
       const selected = id === settings.world;
       button.setAttribute('aria-checked', String(selected));
