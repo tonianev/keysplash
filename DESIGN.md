@@ -186,8 +186,18 @@ in a game (filled), plus words spelled. "Reset progress" clears it.
   ~2.4 kHz), **marimba**, **kalimba**, **celesta** (soft, not bright), **harp**
   (gentle pluck), **soft** (warm pad-ish, bedtime). A gentle master lowpass
   (~6 kHz) and the limiter keep everything warm.
-- Note velocity default ≈ 0.55 — notes sit *under* speech. When speech is
-  about to play, the engine is not ducked (keep it simple) but notes are soft.
+- Note velocity default ≈ 0.55 — notes sit *under* speech, and are ducked
+  gently while a natural-voice clip plays.
+- **Voice.** The default is a natural built-in voice: every line is built in
+  `src/phrases.ts` and pre-generated at build time with Kokoro-82M into small
+  MP3 clips (`npm run voice`), so it is warm, unhurried and identical on every
+  device, fully offline. Clips bypass the warmth lowpass and reverb (master →
+  limiter only) and gently duck the notes (~−6 dB) while they play; combined
+  lines are stitched sentence by sentence and counting stays on the beat.
+  A grown-up can pick *This device* instead (best on-device system voice); only
+  that style says the child's name. A clear *Voice on / off* switch sits on the
+  start screen and tops the panel's Voice section; off means silence for speech
+  while notes keep playing.
 - Effects are listed in `SoundEffect` — all quiet and warm. 'retry' must sound
   curious and kind (e.g. a soft rising minor-third → major resolve), never a
   buzzer. 'success' is a warm rising major phrase; 'complete' a fuller one.
@@ -211,7 +221,8 @@ dark tonal variant (UI reads `world.dark`; a `data-theme="dark"` attribute on
   with the target key filled in the challenge colour.
 - **Parent panel**: a light sheet (iOS Settings / Material settings feel):
   grouped inset sections with hairline dividers, switches, segmented controls,
-  sliders; sections: Learning (mode, layout, speech, letter case, pictures),
+  sliders; sections: Voice (on/off, Natural / This device, says), Learning (mode,
+  layout, letter case, pictures),
   World, Sound, Look & motion, Your child (name, session timer), Progress
   (A–Z / 0–9 grid), Safety, This session. Primary "Keep playing", secondary "Stop".
 - **Overlays**: matte and quiet. All-done: night-blue card with a flat moon,

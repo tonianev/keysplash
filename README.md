@@ -53,11 +53,29 @@ marked wrong. Letters found least often come up more.
 what has been found in a game, plus the words spelled. It is stored on this
 device only.
 
+## Voice
+
+KeySplash talks in a **natural built-in voice**: every line it can say (letter
+names, "bee… bee is for ball", numbers and counting, colours, shapes, game
+prompts and praise) is pre-recorded with the open
+[Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M) speech model and ships
+with the app as small MP3 clips (~3 MB, cached for offline use). It sounds the
+same on every device and needs no network.
+
+- **On/off:** a clear *Voice on / Voice off* switch on the start screen, and the
+  same switch at the top of the grown-up panel's **Voice** section. Off means
+  nothing is spoken at all; notes and effects still play. Mute silences both.
+- **Natural or This device:** the panel can switch to the device's own speech
+  voice (Premium/Enhanced system voices are preferred automatically). Only the
+  device voice can say the child's name ("Hi, Mia!"); the natural voice uses
+  nameless lines ("Let's play!", "Yay!").
+- **Says:** *Letter* or *Letter + word*. *▶ Hear it* plays a sample.
+
 ## Grown-up controls
 
 - **Open the panel:** type the secret word (default `parent`) or hold the
   top-left corner for 2.5 s. On the start screen use *⚙ Grown-up settings*.
-- **Settings:** activity, one-card vs where-the-key-is layout, voice, letter
+- **Settings:** voice on/off and style, activity, one-card vs where-the-key-is layout, letter
   case, pictures, world (7 calm illustrated worlds, optional auto-rotate),
   volume, soft notes, size, liveliness, motion, painting, child's name, session
   timer, secret word, keyboard lock.
@@ -79,9 +97,10 @@ device only.
 ## Privacy
 
 No network requests after load: no ads, analytics, cookies, accounts or CDNs.
-Settings and progress live in `localStorage` on this device. The voice uses the
-browser's on-device speech; voices marked "online" in the panel send words to
-their provider, so the automatic choice prefers on-device voices.
+Settings and progress live in `localStorage` on this device. The natural voice
+is bundled audio. With *This device* selected, the browser's speech is used;
+voices marked "online" in the panel send words to their provider, so the
+automatic choice prefers on-device voices.
 
 ## Development
 
@@ -95,6 +114,16 @@ npm run preview    # serve the build
 ```
 
 `/dev/art-preview.html` (dev server only) shows every backdrop, shape and arrow.
+
+### Regenerating the voice
+
+Change spoken wording only in `src/phrases.ts`, then run `npm run voice`. It
+exports every line from `src/voice/inventory.ts`, synthesises the missing clips
+with Kokoro (incremental; stale clips are removed), writes `public/voice/*.mp3`
+and `src/voice/manifest.json`, and runs QA (a letter-name phoneme check that must
+pass, plus a Whisper round-trip report in `tools/voice/qa-report.json`). Setup
+(Python venv, espeak-ng, ffmpeg) is in [tools/voice/README.md](tools/voice/README.md).
+`tests/voice-manifest.test.ts` fails if any line the app can say has no clip.
 
 ## Structure
 
@@ -110,7 +139,11 @@ src/
   settings.ts         settings, sanitising, migrations
   keymap.ts           physical key geometry, notes, hint keyboard rows
   audio/engine.ts     synthesised soft instruments + limiter
-  audio/speech.ts     speech with priorities and timed sequences
+  audio/speech.ts     device speech (Web Speech) with priorities and timed sequences
+  audio/clip-voice.ts natural voice: plays pre-generated clips, device fallback
+  audio/voice-router.ts switches natural / device voice
+  phrases.ts          every spoken line (one source of truth)
+  voice/              clip inventory, key normalisation, generated manifest
   render/scene.ts     flashcard stage (focus shelf / keyboard layout)
   render/cards.ts     card layout + pre-rendered card sprites
   render/matte.ts     matte particles, ripples, painting, rainbow
@@ -131,4 +164,6 @@ GitHub Pages via `.github/workflows/deploy.yml` (live at
 
 ## Credits
 
-Andika by SIL International (SIL Open Font License). Inspired by tinyfingers.net.
+Andika by SIL International (SIL Open Font License). Natural voice generated
+with Kokoro-82M by hexgrad (Apache-2.0), voice `af_heart`. Inspired by
+tinyfingers.net.

@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  DUCK_LEVEL,
+  MAX_SPEECH,
   MAX_VOICES,
   OnsetWindow,
   WebAudioEngine,
@@ -235,6 +237,11 @@ class FakeAudioContext {
     if (length < 1) fail('empty buffer');
     return new FakeBuffer(channels, length, rate);
   }
+  /** Fake decode: 0.5 s clip; an empty-ish (3-byte) payload fails like a corrupt mp3. */
+  decodeAudioData(data: ArrayBuffer): Promise<FakeBuffer> {
+    if (data.byteLength === 3) return Promise.reject(new Error('bad mp3'));
+    return Promise.resolve(new FakeBuffer(1, this.sampleRate / 2, this.sampleRate));
+  }
   /** Moves time forward and fires `ended` on every source that has stopped. */
   advance(seconds: number): void {
     this.currentTime += seconds;
@@ -249,15 +256,21 @@ class FakeAudioContext {
   liveSources(): number {
     return this.sources.filter((s) => !s.ended).length;
   }
-  /** Walks back from the destination: ceiling ← compressor ← warmth lowpass ← fade ← master. */
+  /**
+   * Walks back from the destination: ceiling ← compressor ← fade ← master, and
+   * into master: duck ← warmth lowpass (notes/music) and the speech gain.
+   */
   chain() {
     const feeding = (target: unknown) => this.nodes.find((n) => n.outputs.has(target));
     const ceiling = feeding(this.destination) as FakeGain;
     const compressor = feeding(ceiling) as FakeCompressor;
-    const warmth = feeding(compressor) as FakeFilter;
-    const fade = feeding(warmth) as FakeGain;
+    const fade = feeding(compressor) as FakeGain;
     const master = feeding(fade) as FakeGain;
-    return { ceiling, compressor, warmth, fade, master };
+    const intoMaster = this.nodes.filter((n) => n.outputs.has(master));
+    const duck = intoMaster.find((n) => feeding(n) instanceof FakeFilter) as FakeGain;
+    const warmth = feeding(duck) as FakeFilter;
+    const speech = intoMaster.find((n) => n !== duck && n instanceof FakeGain && !(feeding(n) instanceof FakeFilter)) as FakeGain;
+    return { ceiling, compressor, warmth, fade, master, duck, speech };
   }
 }
 
@@ -598,6 +611,33 @@ describe('rankVoices', () => {
 });
 
 describe('pickAutoVoice', () => {
+  it('prefers Premium over Enhanced over plain on-device voices', () => {
+    const premium = voice('Zoe (Premium)', 'en-US');
+    const enhanced = voice('Ava (Enhanced)', 'en-US');
+    const plain = voice('Samantha', 'en-US');
+    expect(pickAutoVoice([plain, enhanced, premium])).toBe(premium.voiceURI);
+    expect(pickAutoVoice([plain, enhanced])).toBe(enhanced.voiceURI);
+    expect(pickAutoVoice([voice('Microsoft Jenny - English (United States) Natural', 'en-US'), plain])).toBe(
+      'uri:Microsoft Jenny - English (United States) Natural',
+    );
+    expect(pickAutoVoice([plain, voice('Alex', 'en-US')])).toBe(plain.voiceURI);
+  });
+
+  it('never auto-picks a network voice even if it is a premium/natural one', () => {
+    const online = voice('Microsoft Aria Online (Natural) - English (United States)', 'en-US', false);
+    const plain = voice('Samantha', 'en-US');
+    expect(pickAutoVoice([online, plain])).toBe(plain.voiceURI);
+    expect(pickAutoVoice([voice('Ava (Premium)', 'en-US', false)])).toBeNull();
+  });
+
+  it('within a tier prefers US English and the preferred list', () => {
+    const gb = voice('Daniel (Enhanced)', 'en-GB');
+    const us = voice('Evan (Enhanced)', 'en-US');
+    const sam = voice('Samantha (Enhanced)', 'en-US');
+    expect(pickAutoVoice([gb, us])).toBe(us.voiceURI);
+    expect(pickAutoVoice([us, sam])).toBe(sam.voiceURI);
+  });
+
   it('prefers warm natural voices in order', () => {
     expect(pickAutoVoice([voice('Daniel', 'en-GB'), voice('Samantha', 'en-US'), voice('Alex', 'en-US')])).toBe('uri:Samantha');
     expect(pickAutoVoice([voice('Moira', 'en-IE'), voice('Karen', 'en-AU')])).toBe('uri:Karen');
@@ -1055,5 +1095,134 @@ describe('WebSpeaker.sequence', () => {
     vi.advanceTimersByTime(10_000);
     expect(texts()).toEqual(['one']);
     expect(speaker.sequencing).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// WebAudioEngine: VoiceOutput (recorded speech clips)
+// ---------------------------------------------------------------------------
+
+describe('WebAudioEngine voice output', () => {
+  beforeEach(() => {
+    audioErrors = [];
+    FakeAudioContext.instances = [];
+    vi.stubGlobal('AudioContext', FakeAudioContext);
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  async function unlocked(): Promise<{ engine: WebAudioEngine; ctx: FakeAudioContext }> {
+    const engine = new WebAudioEngine();
+    await engine.unlock();
+    return { engine, ctx: FakeAudioContext.instances[0] };
+  }
+
+  async function clip(engine: WebAudioEngine): Promise<AudioBuffer> {
+    const buffer = await engine.decodeAudio(new ArrayBuffer(16));
+    expect(buffer).not.toBeNull();
+    return buffer as AudioBuffer;
+  }
+
+  it('is null/no-op before unlock and never throws', async () => {
+    const engine = new WebAudioEngine();
+    expect(engine.currentTime()).toBeNull();
+    await expect(engine.decodeAudio(new ArrayBuffer(16))).resolves.toBeNull();
+    expect(engine.playVoice({ duration: 1 } as AudioBuffer)).toBeNull();
+    expect(FakeAudioContext.instances).toHaveLength(0);
+  });
+
+  it('is null without Web Audio at all', async () => {
+    vi.stubGlobal('AudioContext', undefined);
+    const engine = new WebAudioEngine();
+    await engine.unlock();
+    expect(engine.currentTime()).toBeNull();
+    await expect(engine.decodeAudio(new ArrayBuffer(16))).resolves.toBeNull();
+  });
+
+  it('decodes clips and resolves null (never rejects) on bad data', async () => {
+    const { engine, ctx } = await unlocked();
+    expect(engine.currentTime()).toBe(0);
+    ctx.currentTime = 2;
+    expect(engine.currentTime()).toBe(2);
+    expect((await clip(engine)).duration).toBeCloseTo(0.5);
+    await expect(engine.decodeAudio(new ArrayBuffer(3))).resolves.toBeNull();
+    await expect(engine.decodeAudio(new ArrayBuffer(0))).resolves.toBeNull();
+    vi.spyOn(FakeAudioContext.prototype, 'decodeAudioData').mockImplementation(() => {
+      throw new Error('boom');
+    });
+    await expect(engine.decodeAudio(new ArrayBuffer(16))).resolves.toBeNull();
+  });
+
+  it('routes speech into master, bypassing the warmth lowpass and reverb', async () => {
+    const { engine, ctx } = await unlocked();
+    const { master, speech, warmth } = ctx.chain();
+    expect(speech).toBeInstanceOf(FakeGain);
+    const playback = engine.playVoice(await clip(engine), 1);
+    expect(playback).not.toBeNull();
+    const src = ctx.sources[ctx.sources.length - 1] as FakeBufferSource;
+    expect(src.startTime).toBe(1);
+    expect(src.outputs.has(speech)).toBe(true);
+    expect(speech.outputs.has(master)).toBe(true);
+    expect(speech.outputs.has(warmth)).toBe(false);
+    expect(ctx.nodes.some((n) => n instanceof FakeConvolver && n.outputs.has(speech))).toBe(false);
+    expect(playback!.endTime).toBeCloseTo(1.5);
+    // Master volume/mute still apply (speech is upstream of master).
+    engine.setMuted(true);
+    expect(lastRamp(master.gain)).toMatchObject({ value: 0 });
+    expect(audioErrors).toEqual([]);
+  });
+
+  it('ducks the notes bus ~6 dB while speech plays and restores it after', async () => {
+    const { engine, ctx } = await unlocked();
+    const { duck } = ctx.chain();
+    const buffer = await clip(engine);
+    engine.playVoice(buffer, 1);
+    const down = duck.gain.ramps.find((r) => r.value === DUCK_LEVEL);
+    expect(down).toBeDefined();
+    expect(down!.time).toBeCloseTo(1);
+    expect(DUCK_LEVEL).toBeCloseTo(Math.pow(10, -6 / 20), 1);
+    expect(lastRamp(duck.gain)).toMatchObject({ value: 1 });
+    expect(lastRamp(duck.gain).time).toBeCloseTo(1.5 + 0.2);
+    // A second clip right after extends the duck to its end.
+    engine.playVoice(buffer, 1.57);
+    expect(lastRamp(duck.gain).time).toBeCloseTo(2.07 + 0.2);
+    expect(audioErrors).toEqual([]);
+  });
+
+  it('stopping early lifts the duck and settles `ended`', async () => {
+    const { engine, ctx } = await unlocked();
+    const { duck } = ctx.chain();
+    const playback = engine.playVoice(await clip(engine))!;
+    ctx.currentTime = 0.1;
+    playback.stop();
+    playback.stop(); // idempotent
+    await expect(playback.ended).resolves.toBeUndefined();
+    expect(lastRamp(duck.gain)).toMatchObject({ value: 1 });
+    expect(lastRamp(duck.gain).time).toBeCloseTo(0.3);
+    expect(engine.activeSpeech).toBe(0);
+  });
+
+  it('natural end releases the clip', async () => {
+    const { engine, ctx } = await unlocked();
+    const playback = engine.playVoice(await clip(engine))!;
+    expect(engine.activeSpeech).toBe(1);
+    ctx.advance(1);
+    await expect(playback.ended).resolves.toBeUndefined();
+    expect(engine.activeSpeech).toBe(0);
+  });
+
+  it(`keeps at most ${MAX_SPEECH} clips, stopping the oldest`, async () => {
+    const { engine } = await unlocked();
+    const buffer = await clip(engine);
+    const playbacks = Array.from({ length: MAX_SPEECH + 3 }, (_, i) => engine.playVoice(buffer, i)!);
+    expect(engine.activeSpeech).toBe(MAX_SPEECH);
+    let settled = 0;
+    for (const p of playbacks.slice(0, 3)) void p.ended.then(() => settled++);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(settled).toBe(3);
+    expect(audioErrors).toEqual([]);
   });
 });

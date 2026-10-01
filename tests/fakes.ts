@@ -34,6 +34,8 @@ import type {
   StartScreenDeps,
   Timbre,
   VoiceInfo,
+  VoicePlayback,
+  VoiceStyle,
   World,
 } from '../src/types';
 
@@ -136,6 +138,9 @@ export class FakeAudio implements AudioEngine {
   chords: Array<{ midis: number[]; options?: NoteOptions & { spread?: number } }> = [];
   effects: Array<{ name: SoundEffect; options?: NoteOptions }> = [];
   fades: Array<[number, number]> = [];
+  /** Context time reported by currentTime() (null = locked). */
+  time: number | null = 0;
+  voicePlays: Array<{ buffer: AudioBuffer; when?: number }> = [];
 
   unlock(): Promise<void> {
     this.unlocks++;
@@ -165,6 +170,17 @@ export class FakeAudio implements AudioEngine {
   fadeTo(level: number, seconds: number): void {
     this.fades.push([level, seconds]);
   }
+  currentTime(): number | null {
+    return this.time;
+  }
+  decodeAudio(): Promise<AudioBuffer | null> {
+    return Promise.resolve(null);
+  }
+  playVoice(buffer: AudioBuffer, when?: number): VoicePlayback | null {
+    this.voicePlays.push({ buffer, when });
+    const start = when ?? this.time ?? 0;
+    return { endTime: start + (buffer?.duration ?? 0), stop: () => {}, ended: Promise.resolve() };
+  }
 
   effectCount(name: SoundEffect): number {
     return this.effects.filter((e) => e.name === name).length;
@@ -190,7 +206,15 @@ export class FakeSpeaker implements Speaker {
   sequencing = false;
   said: Array<{ text: string; priority: 'low' | 'high' }> = [];
   sequences: SequenceCall[] = [];
+  styles: VoiceStyle[] = [];
+  warms = 0;
 
+  setStyle(style: VoiceStyle): void {
+    this.styles.push(style);
+  }
+  warm(): void {
+    this.warms++;
+  }
   setEnabled(enabled: boolean): void {
     this.enabled = enabled;
   }

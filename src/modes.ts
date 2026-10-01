@@ -15,6 +15,7 @@ import {
   praise,
   wordsFor,
 } from './content';
+import { lines, withPraise } from './phrases';
 import type {
   Challenge,
   ContentContext,
@@ -118,45 +119,44 @@ export class LearningGames implements LearningGame {
 
     if (ch.kind === 'find-number') {
       if (content.kind !== 'digit') return { result: 'free' };
-      if (content.digit === ch.target) return this.found(ch, `Yes! That's ${numberWord(ch.target)}!`, ctx);
-      return this.wrong(ch, `That's ${numberWord(content.digit)}. Can you find ${numberWord(ch.target)}?`);
+      if (content.digit === ch.target) return this.found(ch, lines.yes(numberWord(ch.target)), ctx);
+      return this.wrong(ch, lines.thatsFind(numberWord(content.digit), numberWord(ch.target)));
     }
 
     if (content.kind !== 'letter') return { result: 'free' };
 
     if (ch.kind === 'find-letter') {
-      if (content.letter === ch.target) return this.found(ch, `Yes! That's ${letterName(ch.target)}!`, ctx);
-      return this.wrong(ch, `That's ${letterName(content.letter)}. Can you find ${letterName(ch.target)}?`);
+      if (content.letter === ch.target) return this.found(ch, lines.yes(letterName(ch.target)), ctx);
+      return this.wrong(ch, lines.thatsFind(letterName(content.letter), letterName(ch.target)));
     }
 
     // Spell: one letter at a time.
     const expected = ch.letters[ch.index];
-    if (content.letter !== expected) return this.wrong(ch, `Find ${letterName(expected)}.`);
+    if (content.letter !== expected) return this.wrong(ch, lines.find(letterName(expected)));
     const advanced: Challenge = { ...ch, index: ch.index + 1 };
     this.attempts = 0;
     if (advanced.index < ch.letters.length) {
       this.challenge = advanced;
       const nextName = letterName(ch.letters[advanced.index]);
-      return { result: 'correct', challenge: advanced, complete: false, next: null, say: `${letterName(expected)}! Now find ${nextName}.` };
+      return { result: 'correct', challenge: advanced, complete: false, next: null, say: lines.spellNext(letterName(expected), nextName) };
     }
     const word = ch.word.word;
-    const spelled = ch.letters.map(letterName).join(', ');
-    const next = this.begin(ctx);
+        const next = this.begin(ctx);
     return {
       result: 'correct',
       challenge: advanced,
       complete: true,
       next,
-      say: `${spelled}… ${word}! You spelled ${word}!`,
+      say: lines.spellDone(ch.letters.map((l) => letterName(l)), word),
     };
   }
 
   // -------------------------------------------------------------------------
 
   private found(ch: Challenge, yes: string, ctx: ContentContext): ModeOutcome {
-    const extra = ctx.rng() < 0.3 ? ` ${praise(ctx.rng, ctx.settings.childName)}` : '';
+    const extra = ctx.rng() < 0.3 ? praise(ctx.rng, ctx.settings.childName) : null;
     const next = this.begin(ctx);
-    return { result: 'correct', challenge: ch, complete: true, next, say: yes + extra };
+    return { result: 'correct', challenge: ch, complete: true, next, say: withPraise(yes, extra) };
   }
 
   private wrong(ch: Challenge, redirect: string): ModeOutcome {
@@ -206,7 +206,7 @@ export class LearningGames implements LearningGame {
       display: displayLetter(target, ctx.settings.letterCase),
       word: wordsFor(target, ctx.world)[0] ?? { word: target.toLowerCase(), emoji: '⭐' },
       color: letterColor(target, ctx.world),
-      prompt: `Can you find ${name}?`,
+      prompt: lines.findPrompt(name),
     };
   }
 
@@ -221,7 +221,7 @@ export class LearningGames implements LearningGame {
       target,
       display: String(target),
       color: digitColor(target, ctx.world),
-      prompt: `Can you find ${numberWord(target)}?`,
+      prompt: lines.findPrompt(numberWord(target)),
     };
   }
 
@@ -238,7 +238,7 @@ export class LearningGames implements LearningGame {
       letters,
       index: 0,
       color: letterColor(letters[0], ctx.world),
-      prompt: `Let's spell ${word.word}. Find ${letterName(letters[0])}.`,
+      prompt: lines.spellPrompt(word.word, letterName(letters[0])),
     };
   }
 }

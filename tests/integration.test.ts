@@ -275,3 +275,46 @@ describe('Game with the real DOM modules: learning games', () => {
     expect(ui.dataset.theme).toBe('dark');
   });
 });
+
+describe('Game with the real DOM modules: voice switch', () => {
+  const voiceSwitch = () => ui.querySelector<HTMLButtonElement>('.ks-start .ks-voice');
+
+  it('the start-screen switch turns the voice off: play starts silent, notes still sound', async () => {
+    const h = setup({ childName: 'Mia', voiceStyle: 'device' });
+    const sw = voiceSwitch();
+    expect(sw?.getAttribute('aria-checked')).toBe('true');
+    sw?.click();
+    expect(h.game.playState).toBe('idle'); // the switch never starts play
+    expect(h.store.get().voice).toBe(false);
+    expect(sw?.getAttribute('aria-checked')).toBe('false');
+    expect(h.speaker.enabled).toBe(false);
+
+    clickPlay();
+    await flush();
+    press(h.clock, 'a', 'KeyA');
+    press(h.clock, ' ', 'Space');
+    expect(h.scene.cards.length).toBeGreaterThan(0);
+    expect(h.speaker.said).toHaveLength(0);
+    expect(h.speaker.sequences).toHaveLength(0);
+  });
+
+  it('switching it back on speaks again; the panel style choice reaches the speaker', async () => {
+    const h = setup({ voice: false });
+    voiceSwitch()?.click();
+    expect(h.store.get().voice).toBe(true);
+    expect(h.speaker.enabled).toBe(true);
+    clickPlay();
+    await flush();
+    expect(h.speaker.warms).toBe(1);
+    expect(h.speaker.said[0]?.text).toBe("Let's play!");
+
+    type(h.store.get().secretWord, h.clock);
+    expect(panelShown()).toBe(true);
+    const device = ui.querySelector<HTMLInputElement>('input[data-setting="voiceStyle"][value="device"]');
+    expect(device).not.toBeNull();
+    device!.checked = true;
+    device!.dispatchEvent(new Event('change', { bubbles: true }));
+    expect(h.store.get().voiceStyle).toBe('device');
+    expect(h.speaker.styles.at(-1)).toBe('device');
+  });
+});

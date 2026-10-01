@@ -11,7 +11,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "icons": "pwa-assets-generator"
+    "icons": "pwa-assets-generator",
+    "voice": "node tools/voice/export.mjs && tools/voice/.venv/bin/python tools/voice/generate.py --qa"
   },
   "devDependencies": {
     "@vite-pwa/assets-generator": "^1.0.4",

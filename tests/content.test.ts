@@ -197,7 +197,7 @@ describe('LessonContent.forKey: letters', () => {
       ...LETTERS.map((l) => `Key${l}`), 'Digit0', 'Digit7', 'Numpad3', 'Space', 'Enter', 'Backspace',
       'ArrowUp', 'ArrowLeft', 'Minus', 'Slash', 'NumpadAdd', 'ShiftLeft', 'F5', 'Weird', '',
     ];
-    for (const speech of ['off', 'letter', 'word'] as const) {
+    for (const speech of ['letter', 'word'] as const) {
       for (const code of codes) expect(() => lc.forKey(press(code), ctx({ speech }))).not.toThrow();
     }
   });
@@ -263,7 +263,6 @@ describe('LessonContent.forKey: letters', () => {
   it('speaks per speech mode', () => {
     const say = (speech: Settings['speech']) =>
       expectKind(new LessonContent().forKey(press('KeyB', 'b'), ctx({ speech })), 'letter').speak;
-    expect(say('off')).toBeNull();
     expect(say('letter')).toBe('bee');
     expect(say('word')).toBe('bee… bee is for ball');
   });
@@ -323,13 +322,18 @@ describe('LessonContent.forKey: digits', () => {
     expect(letterMode.speak).toBe('zero');
   });
 
-  it('counts but skips the summary in letter mode, and is silent when speech is off', () => {
+  it('counts but skips the summary in letter mode', () => {
     const letter = expectKind(new LessonContent().forKey(press('Digit2'), ctx({ speech: 'letter' })), 'digit');
     expect(letter.countWords).toEqual(['one', 'two']);
     expect(letter.speak).toBeNull();
-    const off = expectKind(new LessonContent().forKey(press('Digit2'), ctx({ speech: 'off' })), 'digit');
-    expect(off.countWords).toEqual([]);
-    expect(off.speak).toBeNull();
+  });
+
+  it('always returns its lines: whether the voice speaks is Settings.voice, applied by the speaker', () => {
+    const silent = { voice: false } as Partial<Settings>;
+    const lc = new LessonContent();
+    expect(expectKind(lc.forKey(press('Digit2'), ctx(silent)), 'digit').countWords).toEqual(['one', 'two']);
+    expect(expectKind(lc.forKey(press('KeyB', 'b'), ctx(silent)), 'letter').speak).toBe('bee… bee is for ball');
+    expect(expectKind(lc.forKey(press('ArrowUp'), ctx(silent)), 'direction').speak).toBe('up!');
   });
 });
 
@@ -340,7 +344,6 @@ describe('LessonContent.forKey: specials, arrows, shapes, pictures', () => {
     for (const code of ['Enter', 'NumpadEnter', 'Backspace', 'Delete']) {
       expect(lc.forKey(press(code), ctx({ speech: 'word' }))).toEqual({ kind: 'special', effect: 'clear', speak: 'all clean!' });
       expect(expectKind(lc.forKey(press(code), ctx({ speech: 'letter' })), 'special').speak).toBeNull();
-      expect(expectKind(lc.forKey(press(code), ctx({ speech: 'off' })), 'special').speak).toBeNull();
     }
   });
 
@@ -358,7 +361,6 @@ describe('LessonContent.forKey: specials, arrows, shapes, pictures', () => {
         expect(c.speak).toBe(`${dir}!`);
       }
     }
-    expect(expectKind(lc.forKey(press('ArrowUp'), ctx({ speech: 'off' })), 'direction').speak).toBeNull();
   });
 
   it('punctuation keys give a fixed shape and colour, named "blue circle"-style', () => {
@@ -374,7 +376,6 @@ describe('LessonContent.forKey: specials, arrows, shapes, pictures', () => {
       shapes.add(x.shape);
     }
     expect(shapes.size).toBeGreaterThan(4);
-    expect(expectKind(a.forKey(press('Minus'), ctx({ speech: 'off' })), 'shape').speak).toBeNull();
   });
 
   it('other keys give a fixed picture per code with the word spoken', () => {
@@ -385,7 +386,6 @@ describe('LessonContent.forKey: specials, arrows, shapes, pictures', () => {
     expect(f1.speak).toBe('cow');
     const shift = expectKind(lc.forKey(press('ShiftLeft'), ctx()), 'picture');
     expect(shift).toEqual({ kind: 'picture', emoji: '🐝', word: 'bee', speak: 'bee' });
-    expect(expectKind(lc.forKey(press('Tab'), ctx({ speech: 'off' })), 'picture').speak).toBeNull();
   });
 
   it('F1 is a cow and F2 a pig, as DESIGN.md §4 documents', () => {
@@ -424,11 +424,6 @@ describe('LessonContent.forTap', () => {
     expect(t.color.name).toBe('brown');
   });
 
-  it('never speaks when speech is off', () => {
-    const lc = new LessonContent();
-    const c = ctx({ speech: 'off' }, WORLDS.paper, seq(0.3, 0.6));
-    for (let i = 0; i < 9; i++) expect(lc.forTap(c).speak).toBeNull();
-  });
 });
 
 describe('helpers', () => {

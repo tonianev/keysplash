@@ -14,6 +14,7 @@
  * here runs per frame except `update()`, which does a handful of comparisons.
  */
 import { LessonContent, praise, rainbowColors } from './content';
+import { greetingFor, helloFor, lines } from './phrases';
 import { describeKeyLocation, pentatonic } from './keymap';
 import { TIMING } from './types';
 import type {
@@ -164,7 +165,20 @@ function noop(): void {
 }
 
 function speechOn(s: Settings): boolean {
-  return s.speech !== 'off' && !s.muted;
+  return s.voice && !s.muted;
+}
+
+/**
+ * The name the voice may say. The natural voice only has pre-generated clips,
+ * so it never builds name lines ("Hi, Emma!"); the device voice keeps them.
+ */
+function spokenName(s: Settings): string {
+  return s.voiceStyle === 'device' ? s.childName.trim() : '';
+}
+
+/** Settings as content/games see them: no name lines in the natural style. */
+function contentSettings(s: Settings): Settings {
+  return s.childName && !spokenName(s) ? { ...s, childName: '' } : s;
 }
 
 // ---------------------------------------------------------------------------
@@ -346,7 +360,7 @@ export class Game {
 
     this.settings = this.store.get();
     this.world = this.worldFor(this.settings.world);
-    this.content = { world: this.world, settings: this.settings, rng: this.rng };
+    this.content = { world: this.world, settings: contentSettings(this.settings), rng: this.rng };
     this.nextCheerAt = this.cheerInterval();
 
     const worldList = WORLD_ORDER.map((id) => this.worlds[id]).filter((w): w is World => !!w);
@@ -417,6 +431,8 @@ export class Game {
     // Fullscreen must be requested synchronously inside the gesture: first.
     this.enterLockdown('start', false);
     this.unlockAudio();
+    // Prefetch the natural voice's common clips (a no-op for the device voice).
+    if (speechOn(this.settings)) this.speaker.warm?.(); // nothing to prefetch with the voice off
 
     this.state = 'playing';
     this.startScreen.hide();
@@ -439,17 +455,16 @@ export class Game {
     this.pointer.attach();
     this.pointer.setEnabled(true);
 
-    const name = this.settings.childName;
-    const greeting = name ? `Hi, ${name}!` : "Let's play!";
+    const greeting = greetingFor(spokenName(this.settings));
     const challenge = this.games.setMode(this.settings.mode, this.content);
     if (challenge) {
       this.showChallenge(challenge, false);
       // Greeting first, then the first prompt.
-      this.speaker.sequence([greeting], 1300, challenge.prompt);
+      this.speakSequence([greeting], 1300, challenge.prompt);
     } else {
       this.promptBar.hide();
       this.scene.setTopInset(0);
-      this.speaker.say(greeting, 'high');
+      this.speak(greeting, 'high');
     }
   }
 
@@ -523,7 +538,7 @@ export class Game {
     } else if (now >= this.idlePromptAt) {
       this.idlePromptAt = Number.POSITIVE_INFINITY; // once per quiet spell
       const challenge = this.games.current();
-      if (challenge) this.speaker.say(challenge.prompt, 'low');
+      if (challenge) this.speak(challenge.prompt, 'low');
     }
   }
 
@@ -574,6 +589,7 @@ export class Game {
     this.audio.setRoot(this.world.rootMidi);
     this.speaker.setVolume(s.volume);
     this.speaker.setVoice(s.voiceURI);
+    this.speaker.setStyle?.(s.voiceStyle);
     this.speaker.setEnabled(speechOn(s));
     this.scene.setOptions(this.sceneOptions());
     this.scene.setWorld(this.world);
@@ -583,7 +599,7 @@ export class Game {
 
   private applySettings(next: Settings, prev: Settings): void {
     this.settings = next;
-    this.content.settings = next;
+    this.content.settings = contentSettings(next);
 
     if (next.world !== prev.world) this.setWorld(next.world);
     if (next.volume !== prev.volume || next.muted !== prev.muted) {
@@ -591,7 +607,9 @@ export class Game {
       this.audio.setMuted(next.muted);
       this.speaker.setVolume(next.volume);
     }
-    if (next.speech !== prev.speech || next.muted !== prev.muted) this.speaker.setEnabled(speechOn(next));
+    if (next.voiceStyle !== prev.voiceStyle) this.speaker.setStyle?.(next.voiceStyle);
+    if (next.voice !== prev.voice || next.muted !== prev.muted) this.speaker.setEnabled(speechOn(next));
+    if (speechOn(next) && !speechOn(prev) && this.state !== 'idle') this.speaker.warm?.();
     if (next.voiceURI !== prev.voiceURI) this.speaker.setVoice(next.voiceURI);
     if (
       next.motion !== prev.motion ||
@@ -798,8 +816,8 @@ export class Game {
     this.unlockAudio();
     const root = this.world.rootMidi;
     this.audio.chord([pentatonic(root, 0), pentatonic(root, 2), pentatonic(root, 4)], { velocity: 0.7 });
-    const name = this.settings.childName;
-    this.speaker.say(name ? `Hi, ${name}!` : 'Hello!', 'high');
+    // Plays in the selected voice style, so parents can hear the difference.
+    this.speak(helloFor(spokenName(this.settings)), 'high');
   }
 
   private enableInputs(): void {
@@ -1000,7 +1018,7 @@ export class Game {
   /** Count out loud in step with the pictures appearing on the digit card. */
   private count(words: string[], then: string | null, ticks = words.length): void {
     this.clearLessonTimers(false);
-    if (words.length > 0) this.speaker.sequence(words, TIMING.countStepMs, then);
+    if (words.length > 0) this.speakSequence(words, TIMING.countStepMs, then);
     else this.say(then);
     for (let i = 0; i < ticks; i++) {
       this.later(i * TIMING.countStepMs, () => this.audio.effect('count', { velocity: 0.35, step: i }));
@@ -1016,8 +1034,8 @@ export class Game {
     this.clearLessonTimers(false);
     this.scene.special('rainbow', { colors });
     // Name the colours in free play; in a game, don't talk over the prompt.
-    const quiet = this.settings.speech === 'off' || this.settings.mode !== 'explore' || now < this.quietUntil;
-    if (!quiet) this.speaker.sequence(colors.map((c) => c.name), TIMING.rainbowBandMs);
+    const quiet = !speechOn(this.settings) || this.settings.mode !== 'explore' || now < this.quietUntil;
+    if (!quiet) this.speakSequence(colors.map((c) => lines.color(c.name)), TIMING.rainbowBandMs);
     const root = this.world.rootMidi;
     for (let i = 0; i < colors.length; i++) {
       this.later(i * TIMING.rainbowBandMs, () => {
@@ -1038,7 +1056,7 @@ export class Game {
     this.promptBar.show(this.retone(challenge));
     this.syncInset();
     this.idlePromptAt = this.now() + IDLE_PROMPT_MS;
-    if (speak) this.speaker.say(challenge.prompt, 'high');
+    if (speak) this.speak(challenge.prompt, 'high');
   }
 
   /** Tell the scene how much of the top the prompt (and its hint keyboard) covers. */
@@ -1066,7 +1084,7 @@ export class Game {
     this.remember(id, this.keyMap.note(press.code, this.world.rootMidi), content.speak, null);
     this.hintSpoken = false;
     this.clearLessonTimers();
-    this.speaker.say(outcome.say, 'high');
+    this.speak(outcome.say, 'high');
 
     const ch = outcome.challenge;
     // Fill the slot (spell) / clear the hint — also for the last letter of a word.
@@ -1117,7 +1135,7 @@ export class Game {
         this.hintSpoken = true;
       }
     }
-    if (line) this.speaker.say(line, 'high');
+    if (line) this.speak(line, 'high');
   }
 
   private readonly onSmash = (smash: SmashEvent): void => {
@@ -1134,7 +1152,7 @@ export class Game {
       this.audio.chord([pentatonic(root, 0), pentatonic(root, 2), pentatonic(root, 4)], { velocity: 0.4, spread: 0.09 });
     }
     // The first keys of a palm fire onKey before the smash is known; 'high' cuts them off.
-    this.speaker.say(praise(this.rng, this.settings.childName), 'high');
+    this.speak(praise(this.rng, spokenName(this.settings)), 'high');
     this.quietUntil = now + SMASH_QUIET_MS;
     this.lastKeyAt = now;
   };
@@ -1150,11 +1168,13 @@ export class Game {
    */
   private speechFor(text: string | null, mashing: boolean, isClear: boolean): string | null {
     this.keysSinceCheer++;
-    const name = this.settings.childName;
+    const name = this.settings.childName.trim();
     if (name && !mashing && (isClear || this.keysSinceCheer >= this.nextCheerAt)) {
       this.keysSinceCheer = 0;
       this.nextCheerAt = this.cheerInterval();
-      return `Yay, ${name}!`;
+      // The natural voice can't say the name: a plain "Yay!" instead.
+      const spoken = spokenName(this.settings);
+      return spoken ? lines.yayName(spoken) : lines.yay();
     }
     return mashing ? null : text;
   }
@@ -1230,12 +1250,12 @@ export class Game {
     if (mem) {
       if (mem.midi !== null) this.playNote(mem.midi, x, 0.5, 'tap');
       if (mem.count) this.count(mem.count, mem.speak);
-      else if (mem.speak) this.speaker.say(mem.speak, 'high');
+      else if (mem.speak) this.speak(mem.speak, 'high');
       return;
     }
     if (hit.kind === 'shape' && hit.color) {
       this.playNote(this.noteForX(x), x, 0.45, 'tap');
-      if (this.settings.speech !== 'off') this.speaker.say(`${hit.color.name} ${hit.value}`);
+      this.speak(lines.shape(hit.color.name, hit.value));
       return;
     }
     this.audio.effect('pop', { velocity: 0.5, pan: this.panFor(x) });
@@ -1403,7 +1423,16 @@ export class Game {
   }
 
   private say(text: string | null): void {
-    if (text) this.speaker.say(text);
+    if (text) this.speak(text);
+  }
+
+  /** Every spoken line goes through here: nothing at all is said while the voice is off. */
+  private speak(text: string, priority: 'low' | 'high' = 'low'): void {
+    if (speechOn(this.settings)) this.speaker.say(text, priority);
+  }
+
+  private speakSequence(parts: string[], stepMs: number, then?: string | null): void {
+    if (speechOn(this.settings)) this.speaker.sequence(parts, stepMs, then);
   }
 
   private unlockAudio(): void {

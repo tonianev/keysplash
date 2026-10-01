@@ -1,0 +1,5 @@
+# Build-time only: generates the bundled voice clips (nothing here ships).
+kokoro-onnx>=0.6,<0.7
+soundfile>=0.13
+numpy>=2.0
+faster-whisper>=1.2,<2

@@ -41,6 +41,8 @@ describe('DEFAULT_SETTINGS', () => {
       volume: 0.6,
       muted: false,
       notes: true,
+      voice: true,
+      voiceStyle: 'natural',
       speech: 'word',
       voiceURI: null,
       letterCase: 'both',
@@ -111,7 +113,10 @@ describe('sanitizeSettings', () => {
     for (const world of ['paper', 'garden', 'ocean', 'space', 'jungle', 'snow', 'night'] as const) {
       expect(sanitizeSettings({ world }).world).toBe(world);
     }
-    for (const speech of ['off', 'letter', 'word'] as const) expect(sanitizeSettings({ speech }).speech).toBe(speech);
+    for (const speech of ['letter', 'word'] as const) expect(sanitizeSettings({ speech }).speech).toBe(speech);
+    for (const voiceStyle of ['natural', 'device'] as const) {
+      expect(sanitizeSettings({ voiceStyle }).voiceStyle).toBe(voiceStyle);
+    }
     for (const letterCase of ['upper', 'lower', 'both'] as const) {
       expect(sanitizeSettings({ letterCase }).letterCase).toBe(letterCase);
     }
@@ -131,6 +136,29 @@ describe('sanitizeSettings', () => {
     expect(sanitizeSettings({ mode: 'constructor' }).mode).toBe('explore');
     expect(sanitizeSettings({ layout: 'hasOwnProperty' }).layout).toBe('focus');
     expect(sanitizeSettings({ speech: '__proto__' }).speech).toBe('word');
+    expect(sanitizeSettings({ voiceStyle: 'constructor' }).voiceStyle).toBe('natural');
+  });
+
+  it('validates the voice switch and voice style', () => {
+    expect(sanitizeSettings({ voice: false }).voice).toBe(false);
+    expect(sanitizeSettings({ voice: 'no' }).voice).toBe(true);
+    expect(sanitizeSettings({ voice: 0 }).voice).toBe(true);
+    expect(sanitizeSettings({ voiceStyle: 'device' }).voiceStyle).toBe('device');
+    expect(sanitizeSettings({ voiceStyle: 'robot' }).voiceStyle).toBe('natural');
+    expect(sanitizeSettings({ voiceStyle: 'robot' }, { ...DEFAULT_SETTINGS, voiceStyle: 'device' }).voiceStyle).toBe('device');
+  });
+
+  it("migrates the old speech 'off' to voice off with letter + word", () => {
+    expect(sanitizeSettings({ speech: 'off' })).toMatchObject({ voice: false, speech: 'word' });
+    // 'off' wins over a stored voice: true (it was the only way to silence the voice before).
+    expect(sanitizeSettings({ speech: 'off', voice: true })).toMatchObject({ voice: false, speech: 'word' });
+    expect(sanitizeSettings({ speech: 'letter' })).toMatchObject({ voice: true, speech: 'letter' });
+    const storage = memoryStorage({ 'keysplash:settings:v1': JSON.stringify({ speech: 'off', childName: 'Mia' }) });
+    const store = new LocalSettingsStore(storage);
+    expect(store.get()).toMatchObject({ voice: false, speech: 'word', childName: 'Mia' });
+    // Turning the voice back on sticks (the migration does not re-run on later updates).
+    expect(store.update({ voice: true })).toMatchObject({ voice: true, speech: 'word' });
+    expect(new LocalSettingsStore(storage).get().voice).toBe(true);
   });
 
   it('clamps and rounds numbers', () => {

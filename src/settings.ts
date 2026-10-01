@@ -16,6 +16,7 @@ import type {
   SettingsStore,
   SizeLevel,
   SpeechMode,
+  VoiceStyle,
   WorldId,
 } from './types';
 
@@ -30,6 +31,8 @@ export const DEFAULT_SETTINGS: Settings = Object.freeze({
   volume: 0.6,
   muted: false,
   notes: true,
+  voice: true,
+  voiceStyle: 'natural',
   speech: 'word',
   voiceURI: null,
   letterCase: 'both',
@@ -56,7 +59,8 @@ const LAYOUTS: Record<Layout, true> = { focus: true, keyboard: true };
 const LEGACY_WORLDS: Record<string, WorldId> = { party: 'paper', bubbles: 'snow', dino: 'jungle' };
 /** v1 intensity names. */
 const LEGACY_INTENSITY: Record<string, Intensity> = { wild: 'lively' };
-const SPEECH_MODES: Record<SpeechMode, true> = { off: true, letter: true, word: true };
+const SPEECH_MODES: Record<SpeechMode, true> = { letter: true, word: true };
+const VOICE_STYLES: Record<VoiceStyle, true> = { natural: true, device: true };
 const LETTER_CASES: Record<LetterCase, true> = { upper: true, lower: true, both: true };
 const SIZES: Record<SizeLevel, true> = { normal: true, big: true, huge: true };
 const INTENSITIES: Record<Intensity, true> = { calm: true, normal: true, lively: true };
@@ -147,6 +151,9 @@ export function sanitizeSettings(raw: unknown, fallback: Settings = DEFAULT_SETT
       return undefined;
     }
   };
+  // Before the voice on/off switch existed, "off" was a speech mode: it now means
+  // the voice is off, and the mode returns to the default "letter + word".
+  const legacySpeechOff = get('speech') === 'off';
   return {
     world: pickEnum(migrate(get('world'), LEGACY_WORLDS), WORLD_IDS, d.world),
     mode: pickEnum(get('mode'), MODES, d.mode),
@@ -156,7 +163,9 @@ export function sanitizeSettings(raw: unknown, fallback: Settings = DEFAULT_SETT
     volume: pickNumber(get('volume'), 0, 1, d.volume, false),
     muted: pickBool(get('muted'), d.muted),
     notes: pickBool(get('notes'), d.notes),
-    speech: pickEnum(get('speech'), SPEECH_MODES, d.speech),
+    voice: legacySpeechOff ? false : pickBool(get('voice'), d.voice),
+    voiceStyle: pickEnum(get('voiceStyle'), VOICE_STYLES, d.voiceStyle),
+    speech: legacySpeechOff ? 'word' : pickEnum(get('speech'), SPEECH_MODES, d.speech),
     voiceURI: sanitizeVoiceURI(get('voiceURI'), d.voiceURI),
     letterCase: pickEnum(get('letterCase'), LETTER_CASES, d.letterCase),
     pictures: pickBool(get('pictures'), d.pictures),

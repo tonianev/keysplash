@@ -369,3 +369,14 @@ describe('spell', () => {
     expect(SPELL_WORDS.map((w) => w.word).sort()).toEqual(design.split(' ').sort());
   });
 });
+
+describe('LearningGames: voice switch', () => {
+  it('still builds prompts and lines when the voice is off (the speaker applies Settings.voice)', () => {
+    const games = new LearningGames(null, { now: () => 0 });
+    const c = ctx(() => 0, { voice: false });
+    const ch = games.setMode('find-letters', c);
+    expect(ch?.prompt).toBe('Can you find ay?');
+    const out = games.judge(lessons.forKey({ code: 'KeyA', key: 'a' }, c), c);
+    expect(out).toMatchObject({ result: 'correct', say: "Yes! That's ay! Great job!" });
+  });
+});

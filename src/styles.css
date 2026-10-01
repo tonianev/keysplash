@@ -54,6 +54,7 @@
   --ks-accent: #3f74c9;
   --ks-accent-on: #ffffff;
   --ks-accent-soft: #e2ebfa;
+  --ks-accent-ink: #2d5ca8; /* accent text on accent-soft, AA */
   --ks-focus: #3f74c9;
   --ks-scrim: rgba(28, 31, 38, 0.32);
   --ks-glass: rgba(255, 255, 255, 0.78);
@@ -76,6 +77,7 @@
   --ks-accent: #8fb4f0;
   --ks-accent-on: #10182b;
   --ks-accent-soft: #2a3b62;
+  --ks-accent-ink: #b9d0f6;
   --ks-focus: #a9c6f5;
   --ks-scrim: rgba(5, 8, 16, 0.5);
   --ks-glass: rgba(31, 40, 66, 0.82);
@@ -681,6 +683,82 @@ button {
   font: 400 14px/1 var(--ks-font-ui);
 }
 
+/* --- Start-screen voice switch (on = tonal accent fill, off = neutral outline) --- */
+
+.ks-voice {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  margin-top: 2px;
+  padding: 0 18px 0 14px;
+  border: 1.5px solid var(--ks-line-strong);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ks-on-2);
+  font: 600 15px/1 var(--ks-font-ui);
+  cursor: pointer;
+  transition: background-color var(--ks-fast) var(--ks-ease), border-color var(--ks-fast) var(--ks-ease),
+    color var(--ks-fast) var(--ks-ease), transform var(--ks-fast) var(--ks-ease);
+}
+
+.ks-voice:hover {
+  background: var(--ks-surface-3);
+}
+
+.ks-voice:active {
+  transform: scale(0.97);
+}
+
+.ks-voice.is-on {
+  border-color: transparent;
+  background: var(--ks-accent-soft);
+  color: var(--ks-accent-ink);
+}
+
+.ks-voice.is-on:hover {
+  background: color-mix(in srgb, var(--ks-accent-soft) 82%, var(--ks-accent));
+}
+
+.ks-voice__icon {
+  width: 20px;
+  height: 20px;
+  flex: none;
+}
+
+/* A small switch track so on/off reads at a glance. */
+.ks-voice__track {
+  position: relative;
+  width: 34px;
+  height: 20px;
+  margin-left: 4px;
+  flex: none;
+  border-radius: 999px;
+  background: var(--ks-line-strong);
+  transition: background-color var(--ks-med) var(--ks-ease);
+}
+
+.ks-voice__track::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
+  transition: transform var(--ks-med) var(--ks-ease);
+}
+
+.ks-voice.is-on .ks-voice__track {
+  background: var(--ks-green);
+}
+
+.ks-voice.is-on .ks-voice__track::after {
+  transform: translateX(14px);
+}
+
 /* --- World swatches --- */
 
 .ks-worlds {
@@ -935,6 +1013,40 @@ button {
 
 .ks-row--end {
   justify-content: flex-end;
+}
+
+/* Rows that depend on another setting (e.g. voice off) dim and stop taking input. */
+.ks-row.is-disabled {
+  opacity: 0.45;
+  transition: opacity var(--ks-med) var(--ks-ease);
+}
+
+.ks-row.is-disabled * {
+  cursor: default !important;
+}
+
+/* The section's main on/off switch reads a little bigger than the rows under it. */
+.ks-row--hero .ks-row__label {
+  font: 600 17px/1.3 var(--ks-font-ui);
+}
+
+/* A row that belongs to the row above it (the device voice list). */
+.ks-row--sub {
+  padding-left: 14px;
+  border-top-style: dashed;
+}
+
+.ks-btn--tonal {
+  background: var(--ks-accent-soft);
+  color: var(--ks-accent-ink);
+}
+
+.ks-btn--tonal:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--ks-accent-soft) 82%, var(--ks-accent));
+}
+
+.ks-btn:disabled {
+  transform: none;
 }
 
 .ks-note {

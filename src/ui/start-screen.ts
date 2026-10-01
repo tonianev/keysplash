@@ -33,6 +33,17 @@ const PLAY_SVG =
   '<path d="M38 24.5c0-4.2 4.6-6.8 8.2-4.6l33 20.5c3.4 2.1 3.4 7.1 0 9.2l-33 20.5c-3.6 2.2-8.2-.4-8.2-4.6z" fill="currentColor"/>' +
   '</svg>';
 
+const SPEAKER_BASE =
+  '<path d="M4 9.5h3.2L12 5.2v13.6L7.2 14.5H4z" fill="currentColor" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>';
+const VOICE_ON_SVG =
+  '<svg class="ks-voice__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">' + SPEAKER_BASE +
+  '<path d="M15.5 9a4.2 4.2 0 0 1 0 6M18.2 6.6a8 8 0 0 1 0 10.8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>' +
+  '</svg>';
+const VOICE_OFF_SVG =
+  '<svg class="ks-voice__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">' + SPEAKER_BASE +
+  '<path d="M16 9.5l5 5M21 9.5l-5 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>' +
+  '</svg>';
+
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, className?: string, text?: string): HTMLElementTagNameMap[K] {
   const node = document.createElement(tag);
   if (className) node.className = className;
@@ -65,6 +76,8 @@ export class DomStartScreen implements StartScreen {
   private readonly modeButtons = new Map<PlayMode, HTMLButtonElement>();
   private readonly modes: HTMLElement;
   private readonly secretWordEl: HTMLElement;
+  private readonly voiceSwitch: HTMLButtonElement;
+  private renderedVoice: boolean | null = null;
   private readonly unsubscribe: () => void;
 
   private visible = false;
@@ -102,6 +115,16 @@ export class DomStartScreen implements StartScreen {
     this.play.append(el('span', 'ks-play__label', 'Start'));
 
     const hint = el('p', 'ks-start__hint', 'or press any key');
+
+    // The clear voice on/off switch. `data-no-start`: clicking it never starts play.
+    this.voiceSwitch = el('button', 'ks-voice');
+    this.voiceSwitch.type = 'button';
+    this.voiceSwitch.setAttribute('role', 'switch');
+    this.voiceSwitch.setAttribute('aria-label', 'Voice'); // state comes from aria-checked
+    this.voiceSwitch.dataset.noStart = '';
+    this.voiceSwitch.addEventListener('click', this.toggleVoice);
+    this.voiceSwitch.addEventListener('keydown', this.onVoiceKey);
+    this.voiceSwitch.addEventListener('keyup', this.onVoiceKeyUp);
 
     this.picker = el('div', 'ks-worlds');
     this.picker.setAttribute('role', 'radiogroup');
@@ -148,7 +171,7 @@ export class DomStartScreen implements StartScreen {
     }
     modes.addEventListener('keydown', this.onModesKey);
 
-    main.append(this.greeting, title, subtitle, modes, this.play, hint, this.picker, this.worldName);
+    main.append(this.greeting, title, subtitle, modes, this.play, hint, this.voiceSwitch, this.picker, this.worldName);
 
     // Grown-up footnote.
     const foot = el('footer', 'ks-start__foot');
@@ -222,6 +245,7 @@ export class DomStartScreen implements StartScreen {
     this.greeting.textContent = name ? `Hi, ${name}!` : '';
     this.secretWordEl.textContent = settings.secretWord;
     this.worldName.textContent = this.deps.worlds.find((w) => w.id === settings.world)?.label ?? '';
+    this.renderVoice(settings.voice);
     for (const [id, card] of this.modeButtons) {
       const selected = id === settings.mode;
       card.setAttribute('aria-checked', String(selected));
@@ -239,6 +263,37 @@ export class DomStartScreen implements StartScreen {
     document.documentElement.dataset.motion = settings.motion;
   }
 
+  private renderVoice(on: boolean): void {
+    if (this.renderedVoice === on) return;
+    this.renderedVoice = on;
+    const sw = this.voiceSwitch;
+    sw.setAttribute('aria-checked', String(on));
+    sw.classList.toggle('is-on', on);
+    sw.innerHTML = on ? VOICE_ON_SVG : VOICE_OFF_SVG;
+    const track = el('span', 'ks-voice__track');
+    track.setAttribute('aria-hidden', 'true');
+    sw.append(el('span', 'ks-voice__label', on ? 'Voice on' : 'Voice off'), track);
+  }
+
+  private readonly toggleVoice = (): void => {
+    this.deps.store.update({ voice: !this.deps.store.get().voice });
+  };
+
+  /**
+   * Enter/Space toggle on keydown. Default is prevented (and Space's keyup too)
+   * so the browser's native button activation can't toggle a second time.
+   */
+  private readonly onVoiceKey = (event: KeyboardEvent): void => {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (!event.repeat) this.toggleVoice();
+  };
+
+  private readonly onVoiceKeyUp = (event: KeyboardEvent): void => {
+    if (event.key === ' ') event.preventDefault();
+  };
+
   private start(): void {
     if (!this.visible) return;
     const now = performance.now();
@@ -248,8 +303,13 @@ export class DomStartScreen implements StartScreen {
   }
 
   private readonly onClick = (event: MouseEvent): void => {
+    // Use the path captured at dispatch: a control may re-render while handling the
+    // click (the voice switch swaps its icon/label), detaching the original target,
+    // and a detached node no longer finds its [data-no-start] ancestor.
+    const path = typeof event.composedPath === 'function' ? event.composedPath() : [];
+    if (path.some((node) => node instanceof Element && node.hasAttribute('data-no-start'))) return;
     const target = event.target;
-    if (target instanceof Element && target.closest('[data-no-start]')) return;
+    if (target instanceof Element && (target.closest('[data-no-start]') || !target.isConnected)) return;
     this.start();
   };
 

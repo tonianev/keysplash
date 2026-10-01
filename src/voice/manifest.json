@@ -1,0 +1,2291 @@
+{
+  "voice": "af_heart",
+  "model": "kokoro-v1.0",
+  "speed": 0.92,
+  "clips": {
+    "airplane": [
+      "223b0aec8e",
+      760
+    ],
+    "aitch": [
+      "3c33acfbd0",
+      570
+    ],
+    "aitch!": [
+      "0b12f2c2fd",
+      650
+    ],
+    "aitch, ay, tee… hat! you spelled hat!": [
+      "5b78689e0a",
+      2020
+    ],
+    "aitch… aitch is for hat": [
+      "6f058150e3",
+      1550
+    ],
+    "aitch… aitch is for horse": [
+      "504b2905b5",
+      1710
+    ],
+    "aitch… aitch is for house": [
+      "f7beb4ce6c",
+      1680
+    ],
+    "all clean!": [
+      "611349466d",
+      850
+    ],
+    "amazing!": [
+      "29e4043e85",
+      790
+    ],
+    "ar": [
+      "ea02cd6c04",
+      540
+    ],
+    "ar!": [
+      "ae8c8bcd25",
+      600
+    ],
+    "ar… ar is for rabbit": [
+      "6652088295",
+      1570
+    ],
+    "ar… ar is for rainbow": [
+      "3460c4bbf4",
+      1670
+    ],
+    "ar… ar is for rocket": [
+      "94baf31347",
+      1620
+    ],
+    "ay": [
+      "6849bbf73a",
+      500
+    ],
+    "ay!": [
+      "b8f8935ffe",
+      550
+    ],
+    "ay, en, tee… ant! you spelled ant!": [
+      "b71b43ee60",
+      2010
+    ],
+    "ay… ay is for airplane": [
+      "09fb3cc628",
+      1470
+    ],
+    "ay… ay is for alien": [
+      "dea3eead01",
+      1470
+    ],
+    "ay… ay is for ant": [
+      "0c684e4639",
+      1270
+    ],
+    "ay… ay is for apple": [
+      "14219a36f3",
+      1350
+    ],
+    "ball": [
+      "1ee4a41860",
+      560
+    ],
+    "bear": [
+      "dc50827dbc",
+      560
+    ],
+    "bee": [
+      "6b9b85998f",
+      580
+    ],
+    "bee!": [
+      "76ce143454",
+      580
+    ],
+    "bee, ay, el, el… ball! you spelled ball!": [
+      "c3ed66d906",
+      2440
+    ],
+    "bee, ee, dee… bed! you spelled bed!": [
+      "81d1a7f05e",
+      2250
+    ],
+    "bee, ee, ee… bee! you spelled bee!": [
+      "caddb7f7e1",
+      2260
+    ],
+    "bee, oh, ay, tee… boat! you spelled boat!": [
+      "5ae2c9ab19",
+      2450
+    ],
+    "bee, oh, ex… box! you spelled box!": [
+      "bd5361e75a",
+      2580
+    ],
+    "bee, you, ess… bus! you spelled bus!": [
+      "39d896ab2e",
+      2260
+    ],
+    "bee… bee is for ball": [
+      "ba9c3822a8",
+      1480
+    ],
+    "bee… bee is for banana": [
+      "ad64a6b3aa",
+      1570
+    ],
+    "bee… bee is for bear": [
+      "ef86087433",
+      1420
+    ],
+    "bee… bee is for bed": [
+      "07422d31e2",
+      1410
+    ],
+    "bee… bee is for bee": [
+      "8db426cf33",
+      1400
+    ],
+    "bee… bee is for butterfly": [
+      "2eab229036",
+      1760
+    ],
+    "bird": [
+      "5a62383c3b",
+      580
+    ],
+    "blue": [
+      "e0909d1275",
+      590
+    ],
+    "blue circle": [
+      "f2646380b7",
+      890
+    ],
+    "blue diamond": [
+      "c94c50f136",
+      940
+    ],
+    "blue heart": [
+      "8b10af4a65",
+      830
+    ],
+    "blue hexagon": [
+      "9b118a73fa",
+      960
+    ],
+    "blue moon": [
+      "70903e6210",
+      750
+    ],
+    "blue oval": [
+      "6d329c18d9",
+      780
+    ],
+    "blue rectangle": [
+      "22e5163cec",
+      970
+    ],
+    "blue square": [
+      "78174999d5",
+      840
+    ],
+    "blue star": [
+      "7306189ae3",
+      850
+    ],
+    "blue triangle": [
+      "c43cf865ef",
+      950
+    ],
+    "boat": [
+      "1ca459e325",
+      590
+    ],
+    "brown": [
+      "dcaf768112",
+      620
+    ],
+    "brown circle": [
+      "b0934b2e20",
+      970
+    ],
+    "brown diamond": [
+      "d978d27785",
+      1010
+    ],
+    "brown heart": [
+      "42f81db149",
+      900
+    ],
+    "brown hexagon": [
+      "49b862c7f4",
+      1130
+    ],
+    "brown moon": [
+      "3007b9c6ae",
+      850
+    ],
+    "brown oval": [
+      "f486c6de40",
+      880
+    ],
+    "brown rectangle": [
+      "ad40b356ba",
+      1110
+    ],
+    "brown square": [
+      "832c0791f9",
+      930
+    ],
+    "brown star": [
+      "4ffff23e9f",
+      880
+    ],
+    "brown triangle": [
+      "a710c0814f",
+      1060
+    ],
+    "bus": [
+      "9d1c5f96b2",
+      570
+    ],
+    "can you find aitch?": [
+      "86ec7bb73c",
+      1130
+    ],
+    "can you find ar?": [
+      "643de1dd81",
+      1120
+    ],
+    "can you find ay?": [
+      "e239e56298",
+      1050
+    ],
+    "can you find bee?": [
+      "bef46226cd",
+      1120
+    ],
+    "can you find cue?": [
+      "89589bae9c",
+      1100
+    ],
+    "can you find dee?": [
+      "05c1ebf3c4",
+      1120
+    ],
+    "can you find double you?": [
+      "b86fb66ba3",
+      1420
+    ],
+    "can you find ee?": [
+      "70c7a64c4d",
+      1060
+    ],
+    "can you find ef?": [
+      "6b2518d2c3",
+      1100
+    ],
+    "can you find eight?": [
+      "75b393b222",
+      1130
+    ],
+    "can you find el?": [
+      "f9f61af43b",
+      1030
+    ],
+    "can you find em?": [
+      "52d9559e30",
+      1020
+    ],
+    "can you find en?": [
+      "150249e95a",
+      1020
+    ],
+    "can you find ess?": [
+      "8d53b116cd",
+      1050
+    ],
+    "can you find ex?": [
+      "e04c0c26cb",
+      1090
+    ],
+    "can you find eye?": [
+      "efbe7c29cb",
+      1040
+    ],
+    "can you find five?": [
+      "b2ee193f1a",
+      1160
+    ],
+    "can you find four?": [
+      "8f416771d3",
+      1110
+    ],
+    "can you find gee?": [
+      "155fe77b00",
+      1100
+    ],
+    "can you find jay?": [
+      "be77ba1914",
+      1160
+    ],
+    "can you find kay?": [
+      "4590a71205",
+      1090
+    ],
+    "can you find nine?": [
+      "41ed0f5156",
+      1140
+    ],
+    "can you find oh?": [
+      "1e7b2305ed",
+      1010
+    ],
+    "can you find one?": [
+      "f147bd7ac3",
+      1070
+    ],
+    "can you find pee?": [
+      "29b6239e32",
+      1110
+    ],
+    "can you find see?": [
+      "68f951f726",
+      1060
+    ],
+    "can you find seven?": [
+      "d1eb7531ec",
+      1180
+    ],
+    "can you find six?": [
+      "5985d73a44",
+      1190
+    ],
+    "can you find tee?": [
+      "7b9687a91f",
+      1070
+    ],
+    "can you find three?": [
+      "abc10c5c18",
+      1130
+    ],
+    "can you find two?": [
+      "d5d0bc200f",
+      1040
+    ],
+    "can you find vee?": [
+      "0a1316deb8",
+      1110
+    ],
+    "can you find why?": [
+      "2ec0854e2b",
+      1090
+    ],
+    "can you find you?": [
+      "03b7dbc53b",
+      1070
+    ],
+    "can you find zee?": [
+      "dbff5ac444",
+      1120
+    ],
+    "can you find zero?": [
+      "c7566f3409",
+      1190
+    ],
+    "car": [
+      "2de9fe6a8b",
+      570
+    ],
+    "cat": [
+      "85e5638419",
+      530
+    ],
+    "cow": [
+      "c7c7a1fe64",
+      530
+    ],
+    "cue": [
+      "b2385760af",
+      580
+    ],
+    "cue!": [
+      "0dd48a53c6",
+      600
+    ],
+    "cue… cue is for queen": [
+      "1ef14824ab",
+      1440
+    ],
+    "dee": [
+      "dbd3ae4fe5",
+      560
+    ],
+    "dee!": [
+      "e06bb06d6d",
+      590
+    ],
+    "dee, oh, gee… dog! you spelled dog!": [
+      "9654f5e3dc",
+      2380
+    ],
+    "dee, you, see, kay… duck! you spelled duck!": [
+      "6fc9460777",
+      2370
+    ],
+    "dee… dee is for deer": [
+      "97e1313f02",
+      1210
+    ],
+    "dee… dee is for dinosaur": [
+      "6b8fd2f2a8",
+      1800
+    ],
+    "dee… dee is for dog": [
+      "ef8a5552db",
+      1520
+    ],
+    "dee… dee is for dolphin": [
+      "e14513f0b1",
+      1630
+    ],
+    "dee… dee is for drum": [
+      "a3b3025682",
+      1420
+    ],
+    "dee… dee is for duck": [
+      "c8ff5c04d7",
+      1390
+    ],
+    "dog": [
+      "4c332d39bd",
+      590
+    ],
+    "double you": [
+      "f223f86982",
+      780
+    ],
+    "double you!": [
+      "35ad0e04c5",
+      770
+    ],
+    "double you… double you is for watermelon": [
+      "daab911b63",
+      2170
+    ],
+    "double you… double you is for whale": [
+      "d915508fc7",
+      2020
+    ],
+    "double you… double you is for worm": [
+      "4a53288a6a",
+      1940
+    ],
+    "down!": [
+      "af62f9103a",
+      650
+    ],
+    "duck": [
+      "6c3cd433dc",
+      560
+    ],
+    "ee": [
+      "656ff9baf6",
+      530
+    ],
+    "ee!": [
+      "7d223c6e0e",
+      550
+    ],
+    "ee, gee, gee… egg! you spelled egg!": [
+      "7c6e529146",
+      2190
+    ],
+    "ee… ee is for ear": [
+      "82d32fb71f",
+      1350
+    ],
+    "ee… ee is for earth": [
+      "81a1fc0ff0",
+      1370
+    ],
+    "ee… ee is for egg": [
+      "13547ea7f4",
+      1330
+    ],
+    "ee… ee is for elephant": [
+      "f27bc10b59",
+      1580
+    ],
+    "ef": [
+      "d7ac2867e8",
+      510
+    ],
+    "ef!": [
+      "17e30a902f",
+      540
+    ],
+    "ef, ar, oh, gee… frog! you spelled frog!": [
+      "ab1a138885",
+      2710
+    ],
+    "ef, eye, ess, aitch… fish! you spelled fish!": [
+      "ee20eff765",
+      2420
+    ],
+    "ef, oh, ex… fox! you spelled fox!": [
+      "ddf0482c6a",
+      2440
+    ],
+    "ef… ef is for fish": [
+      "ab175fa558",
+      1520
+    ],
+    "ef… ef is for flower": [
+      "63341840a7",
+      1690
+    ],
+    "ef… ef is for frog": [
+      "849fefb683",
+      1550
+    ],
+    "eight": [
+      "30299aa6e1",
+      550
+    ],
+    "eight bears!": [
+      "67ce06672a",
+      870
+    ],
+    "el": [
+      "c62a213bcc",
+      520
+    ],
+    "el!": [
+      "b7229e4aee",
+      550
+    ],
+    "elephant": [
+      "a3c300f63f",
+      740
+    ],
+    "el… el is for ladybug": [
+      "2851d74b1a",
+      1750
+    ],
+    "el… el is for leaf": [
+      "a9246e5c2c",
+      1400
+    ],
+    "el… el is for lemon": [
+      "1834bf273f",
+      1510
+    ],
+    "el… el is for lion": [
+      "3068b66a5f",
+      1560
+    ],
+    "el… el is for lizard": [
+      "69738d56b1",
+      1570
+    ],
+    "em": [
+      "5b85c30075",
+      510
+    ],
+    "em!": [
+      "a14a6538c2",
+      540
+    ],
+    "em, ay, pee… map! you spelled map!": [
+      "b6690f52d5",
+      2290
+    ],
+    "em, oh, oh, en… moon! you spelled moon!": [
+      "20db500e3f",
+      2360
+    ],
+    "em… em is for milk": [
+      "a04a556be8",
+      1490
+    ],
+    "em… em is for monkey": [
+      "1843120838",
+      1790
+    ],
+    "em… em is for moon": [
+      "5e54fe313a",
+      1570
+    ],
+    "en": [
+      "3133e014de",
+      520
+    ],
+    "en!": [
+      "9b7217c5f6",
+      530
+    ],
+    "en… en is for net": [
+      "50973bc29b",
+      1500
+    ],
+    "en… en is for nose": [
+      "0b371eb155",
+      1640
+    ],
+    "en… en is for nut": [
+      "e86342ac2e",
+      1490
+    ],
+    "ess": [
+      "017c8c498c",
+      530
+    ],
+    "ess!": [
+      "5a2f17e49f",
+      550
+    ],
+    "ess, tee, ay, ar… star! you spelled star!": [
+      "5d565dd506",
+      2400
+    ],
+    "ess, you, en… sun! you spelled sun!": [
+      "fcf9e4b435",
+      1930
+    ],
+    "ess… ess is for satellite": [
+      "dc2feac14f",
+      1930
+    ],
+    "ess… ess is for seal": [
+      "c7e11d249c",
+      1640
+    ],
+    "ess… ess is for shark": [
+      "a580e43456",
+      1620
+    ],
+    "ess… ess is for sheep": [
+      "e11609c20e",
+      1570
+    ],
+    "ess… ess is for shell": [
+      "46cef67e60",
+      1470
+    ],
+    "ess… ess is for sled": [
+      "768a1e689f",
+      1680
+    ],
+    "ess… ess is for snail": [
+      "d1122c4b3f",
+      1670
+    ],
+    "ess… ess is for snowman": [
+      "8b5aa4a634",
+      1830
+    ],
+    "ess… ess is for star": [
+      "05acf84892",
+      1660
+    ],
+    "ess… ess is for sun": [
+      "46fe566180",
+      1530
+    ],
+    "ess… ess is for sunflower": [
+      "bbbbfbc631",
+      1980
+    ],
+    "ex": [
+      "f87738a398",
+      520
+    ],
+    "ex!": [
+      "39b8f9f9b8",
+      590
+    ],
+    "ex… box": [
+      "bc1220f54a",
+      910
+    ],
+    "ex… fox": [
+      "899d983af4",
+      910
+    ],
+    "eye": [
+      "08d2464df8",
+      510
+    ],
+    "eye!": [
+      "b4567ec2ec",
+      560
+    ],
+    "eye… eye is for ice": [
+      "0ec7b37560",
+      1570
+    ],
+    "eye… eye is for ice cream": [
+      "2e08edc41c",
+      1850
+    ],
+    "eye… eye is for island": [
+      "b792b2d8fd",
+      1720
+    ],
+    "find aitch.": [
+      "9114eafcf6",
+      860
+    ],
+    "find ar.": [
+      "7503bb4fa7",
+      840
+    ],
+    "find ay.": [
+      "f271eb930a",
+      780
+    ],
+    "find bee.": [
+      "b0976d0512",
+      850
+    ],
+    "find cue.": [
+      "6d6db0d5f0",
+      930
+    ],
+    "find dee.": [
+      "97d294969e",
+      820
+    ],
+    "find double you.": [
+      "7449e6e4df",
+      1130
+    ],
+    "find ee.": [
+      "df1047662a",
+      860
+    ],
+    "find ef.": [
+      "e00e8c1e6c",
+      870
+    ],
+    "find el.": [
+      "0dac3d17e6",
+      760
+    ],
+    "find em.": [
+      "0f8912db0b",
+      830
+    ],
+    "find en.": [
+      "f4804a3454",
+      770
+    ],
+    "find ess.": [
+      "cd126e507f",
+      840
+    ],
+    "find ex.": [
+      "8cc58ebcb7",
+      930
+    ],
+    "find eye.": [
+      "4fdddb3d0a",
+      890
+    ],
+    "find gee.": [
+      "9d86c32ac0",
+      880
+    ],
+    "find jay.": [
+      "e9546371f4",
+      860
+    ],
+    "find kay.": [
+      "8f2d3a856a",
+      850
+    ],
+    "find oh.": [
+      "a2b92061db",
+      780
+    ],
+    "find pee.": [
+      "27680dff10",
+      920
+    ],
+    "find see.": [
+      "a229a3a048",
+      880
+    ],
+    "find tee.": [
+      "037a434c95",
+      890
+    ],
+    "find vee.": [
+      "3dcca4f1d4",
+      830
+    ],
+    "find why.": [
+      "dc02ee582d",
+      850
+    ],
+    "find you.": [
+      "01e813529a",
+      820
+    ],
+    "find zee.": [
+      "7d4d01d687",
+      860
+    ],
+    "fish": [
+      "cf4652a29f",
+      580
+    ],
+    "five": [
+      "4dfe573096",
+      610
+    ],
+    "five flowers!": [
+      "a956a3f166",
+      1050
+    ],
+    "four": [
+      "2bd165749d",
+      590
+    ],
+    "four fish!": [
+      "d3287f5551",
+      860
+    ],
+    "frog": [
+      "0511c2b34b",
+      610
+    ],
+    "gee": [
+      "92676a6e18",
+      580
+    ],
+    "gee!": [
+      "08755f9876",
+      620
+    ],
+    "gee… gee is for giraffe": [
+      "23d51a67ce",
+      1640
+    ],
+    "gee… gee is for gloves": [
+      "1900fd9c57",
+      1640
+    ],
+    "gee… gee is for goat": [
+      "8f68656357",
+      1500
+    ],
+    "gee… gee is for grapes": [
+      "c5f8cc4e8c",
+      1600
+    ],
+    "giraffe": [
+      "cd2281c37a",
+      700
+    ],
+    "great job!": [
+      "db63d4b11b",
+      940
+    ],
+    "green": [
+      "f665a16440",
+      640
+    ],
+    "green circle": [
+      "c3b21f1524",
+      940
+    ],
+    "green diamond": [
+      "2ddc4e21ba",
+      1000
+    ],
+    "green heart": [
+      "c511e6157f",
+      920
+    ],
+    "green hexagon": [
+      "e91261725c",
+      1010
+    ],
+    "green moon": [
+      "9894a46880",
+      840
+    ],
+    "green oval": [
+      "f76c0ed9db",
+      860
+    ],
+    "green rectangle": [
+      "e890ebf2a4",
+      1080
+    ],
+    "green square": [
+      "db4cdf739c",
+      910
+    ],
+    "green star": [
+      "dbc5a0e2f8",
+      870
+    ],
+    "green triangle": [
+      "7cd1908fa5",
+      1050
+    ],
+    "hello!": [
+      "c47ff0c78a",
+      640
+    ],
+    "hen": [
+      "a5d10cbe6f",
+      580
+    ],
+    "hooray!": [
+      "fb7b5421ca",
+      650
+    ],
+    "horse": [
+      "326de779c3",
+      640
+    ],
+    "it is in the bottom row, in the middle.": [
+      "1946776e83",
+      1970
+    ],
+    "it is in the bottom row, on the left.": [
+      "c90a553a5b",
+      2060
+    ],
+    "it is in the bottom row, on the right.": [
+      "323e690b49",
+      2080
+    ],
+    "it is in the middle row, in the middle.": [
+      "63012007e9",
+      1830
+    ],
+    "it is in the middle row, on the left.": [
+      "08876d13fa",
+      2040
+    ],
+    "it is in the middle row, on the right.": [
+      "719ebcfa32",
+      2040
+    ],
+    "it is in the top row, in the middle.": [
+      "cc9503b916",
+      1780
+    ],
+    "it is in the top row, on the left.": [
+      "2f6dea79f5",
+      1940
+    ],
+    "it is in the top row, on the right.": [
+      "36e694fb88",
+      1920
+    ],
+    "it is on the number row, in the middle.": [
+      "d5f6f5ae99",
+      2000
+    ],
+    "it is on the number row, on the left.": [
+      "b3b53eceee",
+      2070
+    ],
+    "it is on the number row, on the right.": [
+      "b3ba35a330",
+      2070
+    ],
+    "it is the long key at the bottom.": [
+      "09924f2832",
+      1780
+    ],
+    "jay": [
+      "c168b069fe",
+      590
+    ],
+    "jay!": [
+      "588eeb67b0",
+      620
+    ],
+    "jay… jay is for jacket": [
+      "cc4f8dadf9",
+      1690
+    ],
+    "jay… jay is for jet": [
+      "cc1f83dbab",
+      1540
+    ],
+    "jay… jay is for juice": [
+      "aafb679508",
+      1570
+    ],
+    "kay": [
+      "a11aeb7bd9",
+      520
+    ],
+    "kay!": [
+      "0f435f77f2",
+      600
+    ],
+    "kay… kay is for key": [
+      "93f9002307",
+      1420
+    ],
+    "kay… kay is for kite": [
+      "c982306b04",
+      1440
+    ],
+    "kay… kay is for koala": [
+      "01ba26cb78",
+      1690
+    ],
+    "ladybug": [
+      "6b1773d5cc",
+      790
+    ],
+    "left!": [
+      "4add376a97",
+      620
+    ],
+    "let's play!": [
+      "cbe4bb1a84",
+      860
+    ],
+    "let's spell ant.": [
+      "126ec5fa7c",
+      1030
+    ],
+    "let's spell ball.": [
+      "b5fd2922d0",
+      1080
+    ],
+    "let's spell bed.": [
+      "3273d28896",
+      1100
+    ],
+    "let's spell bee.": [
+      "a99bb71849",
+      1080
+    ],
+    "let's spell boat.": [
+      "f2c83b859f",
+      1130
+    ],
+    "let's spell box.": [
+      "e4f2cfffd3",
+      1240
+    ],
+    "let's spell bus.": [
+      "1e38d9798e",
+      1120
+    ],
+    "let's spell cake.": [
+      "89965ace39",
+      1130
+    ],
+    "let's spell car.": [
+      "afb1d0fe74",
+      1120
+    ],
+    "let's spell cat.": [
+      "eab487b4fd",
+      1110
+    ],
+    "let's spell cow.": [
+      "5ab8878cf5",
+      1080
+    ],
+    "let's spell cup.": [
+      "21c0aec44f",
+      1070
+    ],
+    "let's spell dog.": [
+      "627e56be18",
+      1150
+    ],
+    "let's spell duck.": [
+      "3a7d5861f0",
+      1080
+    ],
+    "let's spell egg.": [
+      "ff34ec3e8f",
+      1080
+    ],
+    "let's spell fish.": [
+      "4d568d6d19",
+      1160
+    ],
+    "let's spell fox.": [
+      "862c20575c",
+      1200
+    ],
+    "let's spell frog.": [
+      "f6f11367e9",
+      1190
+    ],
+    "let's spell hat.": [
+      "64a0ca9fec",
+      1100
+    ],
+    "let's spell map.": [
+      "254aec8c3c",
+      1120
+    ],
+    "let's spell moon.": [
+      "863723563f",
+      1110
+    ],
+    "let's spell owl.": [
+      "9685c1f97c",
+      1090
+    ],
+    "let's spell pen.": [
+      "3921821147",
+      1120
+    ],
+    "let's spell pig.": [
+      "4b0ba34bc4",
+      1090
+    ],
+    "let's spell star.": [
+      "78bcf7f4af",
+      1170
+    ],
+    "let's spell sun.": [
+      "f6f4ef7277",
+      1080
+    ],
+    "let's spell tree.": [
+      "2392165add",
+      1170
+    ],
+    "lion": [
+      "43c02a56b1",
+      630
+    ],
+    "look carefully at the keys.": [
+      "d0e8893f77",
+      1480
+    ],
+    "monkey": [
+      "4e132225d4",
+      760
+    ],
+    "mouse": [
+      "c03f4e95df",
+      620
+    ],
+    "nine": [
+      "6b7ed7906a",
+      600
+    ],
+    "nine hearts!": [
+      "98fbb527f1",
+      1000
+    ],
+    "now find aitch.": [
+      "c288654de6",
+      1090
+    ],
+    "now find ar.": [
+      "a2eb4c108e",
+      1030
+    ],
+    "now find ay.": [
+      "9950e6332e",
+      1020
+    ],
+    "now find bee.": [
+      "4cfa52bc38",
+      1040
+    ],
+    "now find cue.": [
+      "db67a7c190",
+      1070
+    ],
+    "now find dee.": [
+      "d7d83f1e9c",
+      1050
+    ],
+    "now find double you.": [
+      "790895ac78",
+      1300
+    ],
+    "now find ee.": [
+      "01054cc181",
+      1030
+    ],
+    "now find ef.": [
+      "9568ade86c",
+      1140
+    ],
+    "now find el.": [
+      "c7c3a07bd7",
+      1000
+    ],
+    "now find em.": [
+      "5438773751",
+      1010
+    ],
+    "now find en.": [
+      "5ab12a3403",
+      1020
+    ],
+    "now find ess.": [
+      "402cf463d0",
+      1020
+    ],
+    "now find ex.": [
+      "2c526fa841",
+      1080
+    ],
+    "now find eye.": [
+      "29f0ccfa3d",
+      1040
+    ],
+    "now find gee.": [
+      "45032e0f57",
+      1090
+    ],
+    "now find jay.": [
+      "f2a943786a",
+      1120
+    ],
+    "now find kay.": [
+      "e2eb4dd74d",
+      1070
+    ],
+    "now find oh.": [
+      "25709c72e4",
+      1060
+    ],
+    "now find pee.": [
+      "7b06dce75d",
+      1080
+    ],
+    "now find see.": [
+      "f39943005c",
+      1060
+    ],
+    "now find tee.": [
+      "da3c4e29b2",
+      1110
+    ],
+    "now find vee.": [
+      "79f931d907",
+      1030
+    ],
+    "now find why.": [
+      "624647b575",
+      1080
+    ],
+    "now find you.": [
+      "7b9992b847",
+      1020
+    ],
+    "now find zee.": [
+      "d17e3f1e45",
+      1060
+    ],
+    "oh": [
+      "c8e06d2080",
+      490
+    ],
+    "oh!": [
+      "8f4cceff74",
+      520
+    ],
+    "oh, double you, el… owl! you spelled owl!": [
+      "a9f5eeb53b",
+      2350
+    ],
+    "oh… oh is for octopus": [
+      "a08ce75d40",
+      1830
+    ],
+    "oh… oh is for orange": [
+      "381d8a1a69",
+      1560
+    ],
+    "oh… oh is for owl": [
+      "cb68081040",
+      1310
+    ],
+    "one": [
+      "4a69a910af",
+      540
+    ],
+    "one apple!": [
+      "5ea5823192",
+      820
+    ],
+    "orange": [
+      "5310513036",
+      680
+    ],
+    "orange circle": [
+      "8f04c71056",
+      990
+    ],
+    "orange diamond": [
+      "8bc89e931e",
+      1130
+    ],
+    "orange heart": [
+      "66abb65a7a",
+      950
+    ],
+    "orange hexagon": [
+      "b3c25a1d1e",
+      1130
+    ],
+    "orange moon": [
+      "6465c5ad3e",
+      860
+    ],
+    "orange oval": [
+      "e3ba7b8aff",
+      910
+    ],
+    "orange rectangle": [
+      "a1587ba72e",
+      1110
+    ],
+    "orange square": [
+      "61fe59255c",
+      940
+    ],
+    "orange star": [
+      "192423aa3e",
+      910
+    ],
+    "orange triangle": [
+      "9d4e75a651",
+      1130
+    ],
+    "owl": [
+      "37f616d471",
+      550
+    ],
+    "pee": [
+      "1b6505e600",
+      580
+    ],
+    "pee!": [
+      "ff51686d8b",
+      580
+    ],
+    "pee, ee, en… pen! you spelled pen!": [
+      "3a02186864",
+      2090
+    ],
+    "pee, eye, gee… pig! you spelled pig!": [
+      "00d3b017e6",
+      2270
+    ],
+    "pee… pee is for palm tree": [
+      "6f735294f8",
+      1690
+    ],
+    "pee… pee is for parrot": [
+      "ec51cc692e",
+      1500
+    ],
+    "pee… pee is for penguin": [
+      "49d612aa72",
+      1590
+    ],
+    "pee… pee is for pig": [
+      "ee5bd7e8fc",
+      1440
+    ],
+    "pee… pee is for pizza": [
+      "5e9162446d",
+      1650
+    ],
+    "pee… pee is for planet": [
+      "75b8281f03",
+      1610
+    ],
+    "penguin": [
+      "07a44ca40c",
+      690
+    ],
+    "pig": [
+      "defa08ff1c",
+      560
+    ],
+    "pink": [
+      "18ac22adfa",
+      590
+    ],
+    "pink circle": [
+      "062e02ceb5",
+      910
+    ],
+    "pink diamond": [
+      "adefdebd8f",
+      940
+    ],
+    "pink heart": [
+      "396ede08b0",
+      820
+    ],
+    "pink hexagon": [
+      "d50a85786e",
+      990
+    ],
+    "pink moon": [
+      "571dc61c1a",
+      790
+    ],
+    "pink oval": [
+      "a27daae160",
+      810
+    ],
+    "pink rectangle": [
+      "a339162e69",
+      1050
+    ],
+    "pink square": [
+      "83f6f3e79e",
+      840
+    ],
+    "pink star": [
+      "7da2e7e93d",
+      810
+    ],
+    "pink triangle": [
+      "20d2fb7526",
+      1000
+    ],
+    "purple": [
+      "6383020ff6",
+      660
+    ],
+    "purple circle": [
+      "90e7978fc4",
+      980
+    ],
+    "purple diamond": [
+      "484d343ed6",
+      1040
+    ],
+    "purple heart": [
+      "3a5bc8069c",
+      910
+    ],
+    "purple hexagon": [
+      "31282e1f64",
+      1100
+    ],
+    "purple moon": [
+      "b6132126a3",
+      830
+    ],
+    "purple oval": [
+      "78e4d9dfdc",
+      890
+    ],
+    "purple rectangle": [
+      "96a8f1a8a9",
+      1120
+    ],
+    "purple square": [
+      "a6cc01b185",
+      940
+    ],
+    "purple star": [
+      "01b16a564b",
+      940
+    ],
+    "purple triangle": [
+      "b5d8f8c1b5",
+      1070
+    ],
+    "rabbit": [
+      "3c8deec852",
+      640
+    ],
+    "red": [
+      "936d408db9",
+      510
+    ],
+    "red circle": [
+      "8a5e7f5be8",
+      890
+    ],
+    "red diamond": [
+      "e4c0e0e48d",
+      950
+    ],
+    "red heart": [
+      "9aacfae50d",
+      780
+    ],
+    "red hexagon": [
+      "f29b939733",
+      980
+    ],
+    "red moon": [
+      "a28b39b236",
+      780
+    ],
+    "red oval": [
+      "31b431d794",
+      810
+    ],
+    "red rectangle": [
+      "f66c39f755",
+      1040
+    ],
+    "red square": [
+      "b4be094edc",
+      840
+    ],
+    "red star": [
+      "33af5ff404",
+      850
+    ],
+    "red triangle": [
+      "63c74cb43f",
+      990
+    ],
+    "right!": [
+      "2709b6f9d1",
+      640
+    ],
+    "see": [
+      "9674adc571",
+      570
+    ],
+    "see!": [
+      "bc9227fa5d",
+      580
+    ],
+    "see, ay, ar… car! you spelled car!": [
+      "ef31290dc6",
+      2250
+    ],
+    "see, ay, kay, ee… cake! you spelled cake!": [
+      "8c8df53ba4",
+      2340
+    ],
+    "see, ay, tee… cat! you spelled cat!": [
+      "f4e65a239f",
+      2120
+    ],
+    "see, oh, double you… cow! you spelled cow!": [
+      "cfce902c80",
+      2330
+    ],
+    "see, you, pee… cup! you spelled cup!": [
+      "1559c3d3fa",
+      2210
+    ],
+    "see… see is for cake": [
+      "d73b3a4ae4",
+      1410
+    ],
+    "see… see is for car": [
+      "4995536a66",
+      1450
+    ],
+    "see… see is for cat": [
+      "2b0bc28d89",
+      1440
+    ],
+    "see… see is for comet": [
+      "5ffaac81f9",
+      1590
+    ],
+    "see… see is for crab": [
+      "b5ca4498ac",
+      1500
+    ],
+    "see… see is for crocodile": [
+      "e62adf3a1f",
+      1830
+    ],
+    "seven": [
+      "3fc7bd5726",
+      630
+    ],
+    "seven cars!": [
+      "1a37fe2236",
+      1000
+    ],
+    "sheep": [
+      "488171358e",
+      560
+    ],
+    "six": [
+      "9018f362f5",
+      580
+    ],
+    "six balloons!": [
+      "96e6964bf3",
+      1010
+    ],
+    "super!": [
+      "07801fcd6c",
+      680
+    ],
+    "tee": [
+      "a8a6dbc738",
+      580
+    ],
+    "tee!": [
+      "8a9ccdb23a",
+      590
+    ],
+    "tee, ar, ee, ee… tree! you spelled tree!": [
+      "64784a0c22",
+      2530
+    ],
+    "tee… tee is for t-rex": [
+      "215b764d56",
+      1670
+    ],
+    "tee… tee is for teddy": [
+      "d09afc92e2",
+      1560
+    ],
+    "tee… tee is for telescope": [
+      "51b531e43f",
+      1740
+    ],
+    "tee… tee is for tiger": [
+      "9e2fee45d9",
+      1600
+    ],
+    "tee… tee is for train": [
+      "d75ffba60b",
+      1470
+    ],
+    "tee… tee is for tree": [
+      "6b1522bf87",
+      1440
+    ],
+    "tee… tee is for tulip": [
+      "78f7e5dd12",
+      1520
+    ],
+    "tee… tee is for turtle": [
+      "984b46eae6",
+      1540
+    ],
+    "ten": [
+      "40f626d993",
+      560
+    ],
+    "that's aitch!": [
+      "8092920ec2",
+      830
+    ],
+    "that's aitch.": [
+      "f66f992228",
+      830
+    ],
+    "that's ar!": [
+      "ff9e5811b1",
+      720
+    ],
+    "that's ar.": [
+      "f301eb9b6d",
+      740
+    ],
+    "that's ay!": [
+      "01f6134f4f",
+      710
+    ],
+    "that's ay.": [
+      "33678bf5e0",
+      730
+    ],
+    "that's bee!": [
+      "4ebdb82b46",
+      780
+    ],
+    "that's bee.": [
+      "c7f0e51f1f",
+      790
+    ],
+    "that's cue!": [
+      "1188d394d2",
+      770
+    ],
+    "that's cue.": [
+      "bf804ea77b",
+      770
+    ],
+    "that's dee!": [
+      "92febed765",
+      810
+    ],
+    "that's dee.": [
+      "e80d95f785",
+      790
+    ],
+    "that's double you!": [
+      "b984a45f8d",
+      980
+    ],
+    "that's double you.": [
+      "3298f19d9a",
+      980
+    ],
+    "that's ee!": [
+      "55682a270b",
+      740
+    ],
+    "that's ee.": [
+      "0ea14528d1",
+      760
+    ],
+    "that's ef!": [
+      "c21bdb7d6c",
+      780
+    ],
+    "that's ef.": [
+      "6010aeb941",
+      760
+    ],
+    "that's eight!": [
+      "574a049a92",
+      780
+    ],
+    "that's eight.": [
+      "c6b3cb4010",
+      800
+    ],
+    "that's el!": [
+      "cdf7b596ca",
+      710
+    ],
+    "that's el.": [
+      "78b5b25ca0",
+      710
+    ],
+    "that's em!": [
+      "51a46f4ea7",
+      760
+    ],
+    "that's em.": [
+      "bd03384a6d",
+      750
+    ],
+    "that's en!": [
+      "5021e9dcdb",
+      770
+    ],
+    "that's en.": [
+      "6a36006379",
+      760
+    ],
+    "that's ess!": [
+      "91af8d6069",
+      760
+    ],
+    "that's ess.": [
+      "7587eaca97",
+      780
+    ],
+    "that's ex!": [
+      "221fffccd5",
+      810
+    ],
+    "that's ex.": [
+      "e7f1382228",
+      790
+    ],
+    "that's eye!": [
+      "0c98bb7da7",
+      740
+    ],
+    "that's eye.": [
+      "1e137527b1",
+      750
+    ],
+    "that's five!": [
+      "5c5551d244",
+      850
+    ],
+    "that's five.": [
+      "66984795de",
+      850
+    ],
+    "that's four!": [
+      "34f84b3d66",
+      800
+    ],
+    "that's four.": [
+      "9dc6603ecd",
+      770
+    ],
+    "that's gee!": [
+      "d911055381",
+      810
+    ],
+    "that's gee.": [
+      "a5c3bdae84",
+      820
+    ],
+    "that's jay!": [
+      "8e1fa4190b",
+      810
+    ],
+    "that's jay.": [
+      "37510b6220",
+      780
+    ],
+    "that's kay!": [
+      "f46b22a666",
+      770
+    ],
+    "that's kay.": [
+      "bc6aae3a43",
+      760
+    ],
+    "that's nine!": [
+      "5cb94db104",
+      830
+    ],
+    "that's nine.": [
+      "561afe92d3",
+      790
+    ],
+    "that's oh!": [
+      "3b6b9f0410",
+      730
+    ],
+    "that's oh.": [
+      "2edada96be",
+      740
+    ],
+    "that's one!": [
+      "a7ee44e9e1",
+      780
+    ],
+    "that's one.": [
+      "97a378890a",
+      780
+    ],
+    "that's pee!": [
+      "065a3a9de4",
+      810
+    ],
+    "that's pee.": [
+      "96a4fc1f26",
+      840
+    ],
+    "that's see!": [
+      "2918c7589e",
+      800
+    ],
+    "that's see.": [
+      "6d6d6754a9",
+      790
+    ],
+    "that's seven!": [
+      "f9328d7263",
+      850
+    ],
+    "that's seven.": [
+      "8877a054bc",
+      850
+    ],
+    "that's six!": [
+      "fa632c3404",
+      860
+    ],
+    "that's six.": [
+      "ed8d9c7dfd",
+      860
+    ],
+    "that's tee!": [
+      "c24ddda9df",
+      830
+    ],
+    "that's tee.": [
+      "f3c927ece0",
+      790
+    ],
+    "that's three!": [
+      "2698190f8d",
+      850
+    ],
+    "that's three.": [
+      "25f9b4acd4",
+      790
+    ],
+    "that's two!": [
+      "a4a5e37337",
+      810
+    ],
+    "that's two.": [
+      "32e3f9e53a",
+      810
+    ],
+    "that's vee!": [
+      "fc222a33fa",
+      760
+    ],
+    "that's vee.": [
+      "4281a417ef",
+      740
+    ],
+    "that's why!": [
+      "25859d594a",
+      760
+    ],
+    "that's why.": [
+      "e0ca6c8f51",
+      770
+    ],
+    "that's you!": [
+      "4035a88185",
+      780
+    ],
+    "that's you.": [
+      "987a3515e1",
+      760
+    ],
+    "that's zee!": [
+      "4616ce3c34",
+      760
+    ],
+    "that's zee.": [
+      "5c77891225",
+      760
+    ],
+    "that's zero!": [
+      "c220430b2c",
+      860
+    ],
+    "that's zero.": [
+      "36d5ca43e9",
+      860
+    ],
+    "three": [
+      "e22de57140",
+      660
+    ],
+    "three ducks!": [
+      "2a599c5bb8",
+      880
+    ],
+    "train": [
+      "cf2afa20ae",
+      620
+    ],
+    "turtle": [
+      "f6acab73b1",
+      620
+    ],
+    "two": [
+      "a5e79373d8",
+      580
+    ],
+    "two balls!": [
+      "d7f497ef7e",
+      840
+    ],
+    "up!": [
+      "6dee1d6ce1",
+      530
+    ],
+    "vee": [
+      "783ddcf3d2",
+      550
+    ],
+    "vee!": [
+      "41f9b89dcb",
+      580
+    ],
+    "vee… vee is for van": [
+      "18cc1626ad",
+      1390
+    ],
+    "vee… vee is for violin": [
+      "61229355bc",
+      1620
+    ],
+    "vee… vee is for volcano": [
+      "f6b3a5eee1",
+      1740
+    ],
+    "well done!": [
+      "1190f6173d",
+      760
+    ],
+    "why": [
+      "60aba8659a",
+      560
+    ],
+    "why!": [
+      "b6046b0fc5",
+      570
+    ],
+    "why… why is for yarn": [
+      "4abc39e511",
+      1590
+    ],
+    "why… why is for yo-yo": [
+      "c593cfb035",
+      1910
+    ],
+    "wonderful!": [
+      "95c1a22ccb",
+      810
+    ],
+    "yay!": [
+      "93b398985c",
+      570
+    ],
+    "yellow": [
+      "e13cd907ed",
+      640
+    ],
+    "yellow circle": [
+      "2a55cfc911",
+      980
+    ],
+    "yellow diamond": [
+      "6ba281d70a",
+      1080
+    ],
+    "yellow heart": [
+      "ee717026b9",
+      920
+    ],
+    "yellow hexagon": [
+      "1379adee87",
+      1100
+    ],
+    "yellow moon": [
+      "007ed5a332",
+      840
+    ],
+    "yellow oval": [
+      "ac146b02a5",
+      900
+    ],
+    "yellow rectangle": [
+      "9a4feedc7f",
+      1100
+    ],
+    "yellow square": [
+      "f0c2fc7890",
+      930
+    ],
+    "yellow star": [
+      "5c842b12f0",
+      940
+    ],
+    "yellow triangle": [
+      "7daf92036b",
+      1090
+    ],
+    "yes!": [
+      "f677a467b3",
+      600
+    ],
+    "yes! that's aitch!": [
+      "8652d7bfa6",
+      1250
+    ],
+    "yes! that's ar!": [
+      "bd1ec6b646",
+      1230
+    ],
+    "yes! that's ay!": [
+      "bb3c13af9d",
+      1160
+    ],
+    "yes! that's bee!": [
+      "71159ba7d5",
+      1260
+    ],
+    "yes! that's cue!": [
+      "4f25f671a9",
+      1210
+    ],
+    "yes! that's dee!": [
+      "461857bbc4",
+      1260
+    ],
+    "yes! that's double you!": [
+      "35f022123a",
+      1390
+    ],
+    "yes! that's ee!": [
+      "23ab07839e",
+      1160
+    ],
+    "yes! that's ef!": [
+      "460237ebb4",
+      1180
+    ],
+    "yes! that's eight!": [
+      "accd76e3d3",
+      1210
+    ],
+    "yes! that's el!": [
+      "6c852ea926",
+      1130
+    ],
+    "yes! that's em!": [
+      "a8c2d088b2",
+      1210
+    ],
+    "yes! that's en!": [
+      "1f8c31ae5a",
+      1140
+    ],
+    "yes! that's ess!": [
+      "ef9faef3c1",
+      1190
+    ],
+    "yes! that's ex!": [
+      "d6c6c518d4",
+      1280
+    ],
+    "yes! that's eye!": [
+      "1664ae014b",
+      1160
+    ],
+    "yes! that's five!": [
+      "061c38b637",
+      1290
+    ],
+    "yes! that's four!": [
+      "6efe2880e5",
+      1190
+    ],
+    "yes! that's gee!": [
+      "fe262a53da",
+      1270
+    ],
+    "yes! that's jay!": [
+      "2360d253af",
+      1260
+    ],
+    "yes! that's kay!": [
+      "11f09c6adb",
+      1210
+    ],
+    "yes! that's nine!": [
+      "0a1945ecea",
+      1290
+    ],
+    "yes! that's oh!": [
+      "1fba43986d",
+      1190
+    ],
+    "yes! that's one!": [
+      "9e927d87c0",
+      1180
+    ],
+    "yes! that's pee!": [
+      "196ebbef1d",
+      1260
+    ],
+    "yes! that's see!": [
+      "c6ed5c28da",
+      1190
+    ],
+    "yes! that's seven!": [
+      "664b5f0e97",
+      1270
+    ],
+    "yes! that's six!": [
+      "f5a0426d70",
+      1270
+    ],
+    "yes! that's tee!": [
+      "81bfcefb83",
+      1260
+    ],
+    "yes! that's three!": [
+      "495a3826ad",
+      1210
+    ],
+    "yes! that's two!": [
+      "f68521a833",
+      1220
+    ],
+    "yes! that's vee!": [
+      "87d33ddb3f",
+      1240
+    ],
+    "yes! that's why!": [
+      "5ad5af77aa",
+      1160
+    ],
+    "yes! that's you!": [
+      "8e62142b33",
+      1230
+    ],
+    "yes! that's zee!": [
+      "ecb697f5be",
+      1230
+    ],
+    "yes! that's zero!": [
+      "d951c661b8",
+      1340
+    ],
+    "you": [
+      "1cbda635f3",
+      550
+    ],
+    "you did it!": [
+      "ea56341166",
+      830
+    ],
+    "you!": [
+      "52e62567b3",
+      590
+    ],
+    "you… you is for umbrella": [
+      "20375e6067",
+      1670
+    ],
+    "you… you is for unicorn": [
+      "b4c179f5f4",
+      1620
+    ],
+    "zebra": [
+      "d6da871d89",
+      700
+    ],
+    "zee": [
+      "9817df1e8b",
+      570
+    ],
+    "zee!": [
+      "74d02e2eb7",
+      590
+    ],
+    "zee… zee is for zebra": [
+      "7dbaa5c897",
+      1580
+    ],
+    "zero": [
+      "847c1183f2",
+      650
+    ],
+    "zero — none!": [
+      "be08d22776",
+      960
+    ]
+  }
+}

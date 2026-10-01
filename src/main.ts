@@ -11,6 +11,9 @@ import './styles.css';
 import { registerSW } from 'virtual:pwa-register';
 import { WebAudioEngine } from './audio/engine';
 import { WebSpeaker } from './audio/speech';
+import { ClipVoice, type ClipManifest } from './audio/clip-voice';
+import { VoiceRouter } from './audio/voice-router';
+import manifest from './voice/manifest.json';
 import { FONT_FAMILY, Game, reducedMotionQuery, sceneOptionsFor } from './game';
 import { DomKeyboardInput } from './input/keyboard';
 import { BrowserLockdown } from './input/lockdown';
@@ -100,7 +103,11 @@ async function boot(): Promise<void> {
   stage.onResize((width, height, dpr) => scene.resize(width, height, dpr));
 
   const audio = new WebAudioEngine();
-  const speaker = new WebSpeaker();
+  // Natural voice: pre-generated clips (Kokoro, see tools/voice); anything without a clip
+  // falls back to the device voice. The router follows settings.voiceStyle.
+  const device = new WebSpeaker();
+  const natural = new ClipVoice(audio, manifest as unknown as ClipManifest, { fallback: device });
+  const speaker = new VoiceRouter(natural, device, settings.voiceStyle);
   // One instance for the app's lifetime (it listens to fullscreen/visibility changes).
   const lockdown = new BrowserLockdown();
   lockdown.installGuards();

@@ -126,12 +126,31 @@ export function rankVoices(voices: readonly VoiceLike[]): VoiceInfo[] {
 export function pickAutoVoice(voices: readonly VoiceLike[]): string | null {
   const english = voices.filter((v) => usable(v) && langRank(v.lang) < 4).sort(byRankThenName);
   const onDevice = english.filter((v) => v.localService !== false);
+  // Higher-quality neural downloads first (macOS/iOS "(Premium)" / "(Enhanced)",
+  // Windows "… Natural"), then the hand-picked warm voices, then any on-device one.
+  for (const tier of QUALITY_TIERS) {
+    const hits = onDevice.filter((v) => tier.test(v.name));
+    if (hits.length > 0) return uriOf(hits.sort(byPreference)[0]);
+  }
   for (const preferred of PREFERRED_VOICES) {
     const hit = onDevice.find((v) => nameMatches(v.name, preferred));
     if (hit) return uriOf(hit);
   }
   if (onDevice.length > 0) return uriOf(onDevice[0]);
   return null;
+}
+
+/** On-device voice quality markers, best first. */
+const QUALITY_TIERS: readonly RegExp[] = [/\(premium\)/i, /\(enhanced\)/i, /\b(natural|neural)\b/i];
+
+function preferredIndex(name: string): number {
+  const i = PREFERRED_VOICES.findIndex((p) => nameMatches(name, p));
+  return i < 0 ? PREFERRED_VOICES.length : i;
+}
+
+/** Within a quality tier: language, then the preferred list, then name. */
+function byPreference(a: VoiceLike, b: VoiceLike): number {
+  return langRank(a.lang) - langRank(b.lang) || preferredIndex(a.name) - preferredIndex(b.name) || a.name.localeCompare(b.name);
 }
 
 function defaultSynth(): SpeechSynthesis | null {

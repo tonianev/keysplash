@@ -3,7 +3,7 @@ import type { LearningProgress, LockStatus, ParentPanel, ParentPanelDeps, Settin
 /** Settings keys whose value is a boolean (rendered as switches). */
 type BoolKey = { [K in keyof Settings]: Settings[K] extends boolean ? K : never }[keyof Settings];
 /** Settings keys rendered as pill groups. */
-type ChoiceKey = 'mode' | 'layout' | 'speech' | 'letterCase' | 'size' | 'intensity' | 'motion';
+type ChoiceKey = 'mode' | 'layout' | 'voiceStyle' | 'speech' | 'letterCase' | 'size' | 'intensity' | 'motion';
 type Choices<K extends ChoiceKey> = ReadonlyArray<readonly [Settings[K], string]>;
 
 const SECRET_WORD = /^[a-z]{4,16}$/;
@@ -13,6 +13,11 @@ const LIVE_REFRESH_MS = 1000;
 /** Matches the CSS fade duration; after it the element gets `hidden`. */
 const FADE_MS = 280;
 const SAVED_HINT_MS = 1800;
+
+const STYLE_DESC: Record<Settings['voiceStyle'], string> = {
+  natural: 'Natural is built in: it works offline and sounds the same everywhere.',
+  device: 'This device uses your computer’s own voices, and can say your child’s name.',
+};
 
 const FOCUSABLE =
   'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [href], [tabindex]:not([tabindex="-1"])';
@@ -119,6 +124,7 @@ export class DomParentPanel implements ParentPanel {
 
     this.body = el('div', 'ks-panel__body');
     this.body.append(
+      this.buildVoiceSection(),
       this.buildLearningSection(),
       this.buildWorldSection(),
       this.buildSoundSection(),
@@ -522,6 +528,54 @@ export class DomParentPanel implements ParentPanel {
     );
   }
 
+  /** The clear voice on/off switch first; everything below it is dimmed while the voice is off. */
+  private buildVoiceSection(): HTMLElement {
+    const main = this.switchRow('voice', 'Voice', 'Speaks letters, words, numbers and colours.');
+    main.classList.add('ks-row--hero');
+
+    const style = this.choiceRow('voiceStyle', 'Voice type', [
+      ['natural', 'Natural'],
+      ['device', 'This device'],
+    ], STYLE_DESC.natural);
+    const styleDesc = style.querySelector<HTMLElement>('.ks-row__desc');
+
+    const voiceId = this.id('voiceURI');
+    this.voiceSelect = el('select', 'ks-select');
+    this.voiceSelect.id = voiceId;
+    this.voiceSelect.dataset.setting = 'voiceURI';
+    this.voiceSelect.setAttribute('aria-describedby', `${voiceId}-desc`);
+    this.voiceSelect.addEventListener('change', () => this.patch({ voiceURI: this.voiceSelect.value || null }));
+    const deviceDesc = this.deps.speaker.supported
+      ? 'Automatic picks the best voice on this device. Voices marked “online” send each word to their provider and need a connection.'
+      : 'This browser has no speech voices. Natural still works.';
+    const device = this.row(voiceId, 'Device voice', this.voiceSelect, deviceDesc);
+    device.classList.add('ks-row--sub');
+
+    const says = this.choiceRow('speech', 'Says', [
+      ['letter', 'Letter'],
+      ['word', 'Letter + word'],
+    ], 'Letter says “B”. Letter + word says “B… B is for ball”. Numbers, shapes and colours are always named.');
+
+    const hear = button('ks-btn ks-btn--tonal', '▶ Hear it', () => this.deps.actions.testSound());
+    hear.dataset.action = 'hear';
+    const hearRow = el('div', 'ks-row ks-row--end');
+    hearRow.append(hear);
+
+    const dependents = [style, device, says, hearRow];
+    this.refreshers.push((s) => {
+      device.hidden = s.voiceStyle !== 'device';
+      if (styleDesc) styleDesc.textContent = STYLE_DESC[s.voiceStyle];
+      for (const row of dependents) {
+        row.classList.toggle('is-disabled', !s.voice);
+        for (const control of row.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLButtonElement>('input, select, button')) {
+          control.disabled = !s.voice || (control === this.voiceSelect && !this.deps.speaker.supported);
+        }
+      }
+    });
+
+    return this.section('voice', '🔊', 'Voice', main, style, device, says, hearRow);
+  }
+
   private buildSoundSection(): HTMLElement {
     // Volume
     const volumeId = this.id('volume');
@@ -549,29 +603,13 @@ export class DomParentPanel implements ParentPanel {
       volumeBox.classList.toggle('is-muted', s.muted);
     });
 
-    // Voice
-    const voiceId = this.id('voiceURI');
-    this.voiceSelect = el('select', 'ks-select');
-    this.voiceSelect.id = voiceId;
-    this.voiceSelect.dataset.setting = 'voiceURI';
-    this.voiceSelect.addEventListener('change', () => this.patch({ voiceURI: this.voiceSelect.value || null }));
-    const voiceDesc = this.deps.speaker.supported
-      ? 'Automatic picks an on-device voice. Voices marked “online” send each word to their provider and need a connection.'
-      : 'Speech is not available in this browser.';
-
-    const test = button('ks-btn ks-btn--ghost', '🔔 Test sound', () => this.deps.actions.testSound());
-    const testRow = el('div', 'ks-row ks-row--end');
-    testRow.append(test);
-
     return this.section(
       'sound',
-      '🔊',
+      '🎵',
       'Sound',
       this.row(volumeId, 'Volume', volumeBox, 'Peaks are always limited to protect little ears.'),
       this.switchRow('muted', 'Mute'),
       this.switchRow('notes', 'Soft notes', 'Each key plays its own gentle note under the voice. Off: a quiet tap instead.'),
-      this.row(voiceId, 'Voice', this.voiceSelect, voiceDesc),
-      testRow,
     );
   }
 
@@ -590,11 +628,6 @@ export class DomParentPanel implements ParentPanel {
         ['focus', 'One card'],
         ['keyboard', 'Where the key is'],
       ], 'One card shows a single big flashcard with recent ones on a shelf. Where the key is places cards where each key sits on the keyboard.'),
-      this.choiceRow('speech', 'Voice says', [
-        ['off', 'Nothing'],
-        ['letter', 'Letter'],
-        ['word', 'Letter + word'],
-      ], 'Letter says “bee”. Letter + word says “bee… bee is for ball”. Numbers are always counted out loud unless the voice is off.'),
       this.choiceRow('letterCase', 'Letters', [
         ['upper', 'ABC'],
         ['lower', 'abc'],
@@ -675,7 +708,7 @@ export class DomParentPanel implements ParentPanel {
       'child',
       '🧒',
       'Your child',
-      this.row(nameId, 'Name', name, 'Shown on the start screen and cheered now and then.'),
+      this.row(nameId, 'Name', name, 'Shown on the start screen. With the “This device” voice, it’s also cheered now and then.'),
       this.row(
         timerId,
         'Session timer',
@@ -883,7 +916,7 @@ export class DomParentPanel implements ParentPanel {
     }
     select.replaceChildren(...options);
     select.value = settings.voiceURI ?? '';
-    select.disabled = !this.deps.speaker.supported;
+    select.disabled = !this.deps.speaker.supported || !settings.voice;
   }
 
   /** Saves the typed secret word if it is valid; otherwise optionally explains why not. */

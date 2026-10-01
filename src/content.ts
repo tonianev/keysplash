@@ -17,6 +17,7 @@ import type {
   WordEntry,
   World,
 } from './types';
+import { lines, pickPraise } from './phrases';
 
 /** 'A'…'Z' → toddler-familiar nouns, each with one clear emoji (Unicode ≤ 13, no ZWJ). */
 export const BASE_WORDS: Record<string, WordEntry[]> = {
@@ -56,16 +57,16 @@ const LETTER_NAMES: Record<string, string> = {
   S: 'ess', T: 'tee', U: 'you', V: 'vee', W: 'double you', X: 'ex', Y: 'why', Z: 'zee',
 };
 
-const NUMBER_WORDS = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'];
+export const NUMBER_WORDS: readonly string[] = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'];
 
 const SHAPE_LABELS: Record<ShapeKind, string> = {
   circle: 'circle', square: 'square', triangle: 'triangle', star: 'star', heart: 'heart',
   diamond: 'diamond', moon: 'moon', oval: 'oval', hexagon: 'hexagon', rectangle: 'rectangle',
 };
-const SHAPES = Object.keys(SHAPE_LABELS) as ShapeKind[];
+export const SHAPES: readonly ShapeKind[] = Object.keys(SHAPE_LABELS) as ShapeKind[];
 
 /** Countable things for digit cards: [singular, plural, emoji]. Fixed per digit. */
-const COUNTABLES: ReadonlyArray<readonly [string, string, string]> = [
+export const COUNTABLES: ReadonlyArray<readonly [string, string, string]> = [
   ['star', 'stars', '⭐'],
   ['apple', 'apples', '🍎'],
   ['ball', 'balls', '⚽'],
@@ -82,7 +83,7 @@ const COUNTABLES: ReadonlyArray<readonly [string, string, string]> = [
  * Pictures for every other key (modifiers, F-keys, Tab, Esc…): farm/home
  * animals and objects. Fixed per key code; unknown codes hash into the list.
  */
-const PICTURES: ReadonlyArray<readonly [string, string]> = [
+export const PICTURES: ReadonlyArray<readonly [string, string]> = [
   ['cow', '🐄'], ['pig', '🐖'], ['sheep', '🐑'], ['horse', '🐎'], ['hen', '🐔'], ['duck', '🦆'],
   ['dog', '🐕'], ['cat', '🐈'], ['rabbit', '🐇'], ['mouse', '🐁'], ['frog', '🐸'], ['owl', '🦉'],
   ['bee', '🐝'], ['ladybug', '🐞'], ['turtle', '🐢'], ['fish', '🐟'], ['bird', '🐦'], ['bear', '🐻'],
@@ -116,9 +117,7 @@ const DIRECTIONS: Record<string, DirectionName> = {
 };
 const DIRECTION_COLOR: Record<DirectionName, ColorName> = { up: 'blue', down: 'green', left: 'orange', right: 'purple' };
 
-const RAINBOW_ORDER: ColorName[] = ['red', 'orange', 'yellow', 'green', 'blue', 'purple'];
-
-const PRAISE = ['Great job!', 'You did it!', 'Wonderful!', 'Well done!', 'Hooray!', 'Super!', 'Yay!', 'Amazing!'];
+export const RAINBOW_ORDER: readonly ColorName[] = ['red', 'orange', 'yellow', 'green', 'blue', 'purple'];
 
 const FALLBACK_COLOR: NamedColor = { name: 'blue', hex: '#4A86D8', container: '#DFEAFB', ink: '#1D4F99' };
 
@@ -205,9 +204,7 @@ export function rainbowColors(world: World): NamedColor[] {
 
 /** Warm praise; sometimes with the child's name. */
 export function praise(rng: () => number, childName = ''): string {
-  const name = childName.trim();
-  if (name && rng() < 0.35) return `Great job, ${name}!`;
-  return PRAISE[Math.min(PRAISE.length - 1, Math.floor(rng() * PRAISE.length))];
+  return pickPraise(rng, childName);
 }
 
 /** The upper-case letter a key press means, or null. */
@@ -248,7 +245,7 @@ export class LessonContent {
 
     const special = SPECIALS[code];
     if (special) {
-      return { kind: 'special', effect: special, speak: special === 'clear' && speech === 'word' ? 'all clean!' : null };
+      return { kind: 'special', effect: special, speak: special === 'clear' && speech === 'word' ? lines.clean() : null };
     }
 
     const direction = DIRECTIONS[code];
@@ -257,7 +254,7 @@ export class LessonContent {
         kind: 'direction',
         direction,
         color: colorNamed(world, DIRECTION_COLOR[direction]),
-        speak: speech === 'off' ? null : `${direction}!`,
+        speak: lines.direction(directionWord(direction)),
       };
     }
 
@@ -270,11 +267,11 @@ export class LessonContent {
     const symbol = SYMBOL_INDEX.get(code);
     if (symbol !== undefined) {
       const shape = SHAPES[symbol % SHAPES.length];
-      return this.shape(shape, paletteAt(world, symbol * 3), ctx, true);
+      return this.shape(shape, paletteAt(world, symbol * 3), true);
     }
 
     const [word, emoji] = PICTURES[PICTURE_FOR_CODE[code] ?? hash(code || 'none') % PICTURES.length];
-    return { kind: 'picture', emoji, word, speak: speech === 'off' ? null : word };
+    return { kind: 'picture', emoji, word, speak: lines.picture(word) };
   }
 
   /** A tap on empty space: a random shape and colour, named every third tap. */
@@ -283,7 +280,7 @@ export class LessonContent {
     const shape = SHAPES[Math.min(SHAPES.length - 1, Math.floor(rng() * SHAPES.length))];
     const color = paletteAt(world, Math.floor(rng() * world.palette.length));
     this.taps = (this.taps + 1) % 3;
-    return this.shape(shape, color, ctx, this.taps === 0);
+    return this.shape(shape, color, this.taps === 0);
   }
 
   /** The word a letter would show next, without advancing (for prompts). */
@@ -301,11 +298,8 @@ export class LessonContent {
     this.cursors.set(letter, (i + 1) % Math.max(1, list.length));
 
     const name = letterName(letter);
-    let speak: string | null = null;
-    if (settings.speech === 'letter') speak = name;
-    else if (settings.speech === 'word') {
-      speak = (word.at ?? 0) === 0 ? `${name}… ${name} is for ${word.word}` : `${name}… ${word.word}`;
-    }
+    const speak =
+      settings.speech === 'letter' ? lines.letter(name) : lines.letterWord(name, word.word, (word.at ?? 0) === 0);
     return {
       kind: 'letter',
       letter,
@@ -320,11 +314,10 @@ export class LessonContent {
     const { world, settings } = ctx;
     const [singular, plural, emoji] = COUNTABLES[digit % COUNTABLES.length];
     const noun = digit === 1 ? singular : plural;
-    const counting = settings.speech !== 'off';
-    const countWords = counting ? NUMBER_WORDS.slice(1, digit + 1) : [];
+    const countWords = NUMBER_WORDS.slice(1, digit + 1).map(lines.number);
     let speak: string | null = null;
-    if (settings.speech === 'word') speak = digit === 0 ? 'zero — none!' : `${numberWord(digit)} ${noun}!`;
-    else if (settings.speech === 'letter' && digit === 0) speak = 'zero';
+    if (settings.speech === 'word') speak = digit === 0 ? lines.zero() : lines.countSummary(numberWord(digit), noun);
+    else if (digit === 0) speak = lines.number(numberWord(0));
     return {
       kind: 'digit',
       digit,
@@ -337,9 +330,9 @@ export class LessonContent {
     };
   }
 
-  private shape(shape: ShapeKind, color: NamedColor, ctx: ContentContext, named: boolean): KeyContent {
+  private shape(shape: ShapeKind, color: NamedColor, named: boolean): KeyContent {
     const label = shapeLabel(shape);
-    const speak = named && ctx.settings.speech !== 'off' ? `${color.name} ${label}` : null;
+    const speak = named ? lines.shape(color.name, label) : null;
     return { kind: 'shape', shape, color, label, speak };
   }
 }

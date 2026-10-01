@@ -30,6 +30,8 @@ const BASE_SETTINGS: Settings = {
   volume: 0.7,
   muted: false,
   notes: true,
+  voice: true,
+  voiceStyle: 'natural',
   speech: 'letter',
   voiceURI: null,
   letterCase: 'upper',
@@ -202,6 +204,82 @@ describe('DomStartScreen', () => {
     expect(screen.isVisible).toBe(true);
     expect(q('.ks-start').hidden).toBe(false);
     screen.destroy();
+  });
+
+  describe('voice switch', () => {
+    it('is a labelled switch that reflects the store', () => {
+      const { screen, q } = setup();
+      const sw = q<HTMLButtonElement>('.ks-voice');
+      expect(sw.getAttribute('role')).toBe('switch');
+      expect(sw.hasAttribute('data-no-start')).toBe(true);
+      expect(sw.getAttribute('aria-checked')).toBe('true');
+      expect(sw.textContent).toContain('Voice on');
+      screen.destroy();
+    });
+
+    it('a click toggles the voice and never starts play', () => {
+      const { store, onStart, screen, q } = setup();
+      const sw = q<HTMLButtonElement>('.ks-voice');
+      sw.click();
+      expect(store.updates).toContainEqual({ voice: false });
+      expect(sw.getAttribute('aria-checked')).toBe('false');
+      expect(sw.textContent).toContain('Voice off');
+      expect(sw.classList.contains('is-on')).toBe(false);
+      sw.click();
+      expect(store.get().voice).toBe(true);
+      expect(onStart).not.toHaveBeenCalled();
+      screen.destroy();
+    });
+
+    it('a real click on the label inside the switch (which re-renders) never starts play', () => {
+      const { store, onStart, screen, q } = setup();
+      const label = q<HTMLElement>('.ks-voice .ks-voice__label');
+      label.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+      expect(store.get().voice).toBe(false);
+      expect(label.isConnected).toBe(false); // the switch re-rendered under the click
+      expect(onStart).not.toHaveBeenCalled();
+      screen.destroy();
+    });
+
+    it('Enter and Space toggle it without starting play', () => {
+      const { store, onStart, screen, q } = setup();
+      const sw = q<HTMLButtonElement>('.ks-voice');
+      sw.focus();
+      const enter = key('keydown', 'Enter');
+      sw.dispatchEvent(enter);
+      expect(enter.defaultPrevented).toBe(true);
+      expect(store.get().voice).toBe(false);
+      sw.dispatchEvent(key('keydown', ' '));
+      expect(store.get().voice).toBe(true);
+      const up = key('keyup', ' ');
+      sw.dispatchEvent(up);
+      expect(up.defaultPrevented).toBe(true);
+      // Auto-repeat while held does not flip it back and forth.
+      sw.dispatchEvent(key('keydown', ' ', { repeat: true }));
+      expect(store.get().voice).toBe(true);
+      expect(onStart).not.toHaveBeenCalled();
+      screen.destroy();
+    });
+
+    it('other keys on the focused switch still start play', () => {
+      const { store, onStart, screen, q } = setup();
+      const sw = q<HTMLButtonElement>('.ks-voice');
+      sw.focus();
+      sw.dispatchEvent(key('keydown', 'a'));
+      expect(onStart).toHaveBeenCalledTimes(1);
+      expect(store.updates).toEqual([]);
+      screen.destroy();
+    });
+
+    it('live-updates when the voice changes elsewhere', () => {
+      const { store, screen, q } = setup({ voice: false });
+      const sw = q<HTMLButtonElement>('.ks-voice');
+      expect(sw.getAttribute('aria-checked')).toBe('false');
+      store.update({ voice: true });
+      expect(sw.getAttribute('aria-checked')).toBe('true');
+      expect(sw.classList.contains('is-on')).toBe(true);
+      screen.destroy();
+    });
   });
 
   it('calls onStart when Play is clicked', () => {
@@ -665,6 +743,96 @@ describe('DomParentPanel', () => {
     panel.destroy();
   });
 
+  describe('Voice section', () => {
+    const voiceSection = () =>
+      [...root.querySelectorAll<HTMLElement>('.ks-sec')].find((s) => s.querySelector('.ks-sec__title')?.textContent?.includes('Voice')) as HTMLElement;
+
+    it('comes first and holds every voice control', () => {
+      const { panel } = setup();
+      panel.open();
+      const sec = voiceSection();
+      expect(root.querySelector('.ks-sec')).toBe(sec);
+      for (const setting of ['voice', 'voiceStyle', 'voiceURI', 'speech']) {
+        expect(sec.querySelector(`[data-setting="${setting}"]`)).not.toBeNull();
+      }
+      expect(sec.textContent).toContain('Speaks letters, words, numbers and colours.');
+      // Old controls are gone: no 'off' speech value, no voice list outside this section.
+      expect(root.querySelector('[data-setting="speech"][value="off"]')).toBeNull();
+      expect(root.querySelectorAll('[data-setting="voiceURI"]').length).toBe(1);
+      panel.destroy();
+    });
+
+    it('the big switch writes voice patches and follows the store', () => {
+      const { panel, store, q } = setup();
+      panel.open();
+      const sw = q<HTMLInputElement>('input[data-setting="voice"]');
+      expect(sw.getAttribute('role')).toBe('switch');
+      expect(sw.checked).toBe(true);
+      sw.checked = false;
+      change(sw);
+      expect(store.updates).toContainEqual({ voice: false });
+      store.update({ voice: true });
+      expect(sw.checked).toBe(true);
+      panel.destroy();
+    });
+
+    it('style and Says segmented controls patch, device list only for "This device"', () => {
+      const { panel, store, q } = setup();
+      panel.open();
+      const select = q<HTMLSelectElement>('select[data-setting="voiceURI"]');
+      const deviceRow = select.closest<HTMLElement>('.ks-row') as HTMLElement;
+      expect(deviceRow.hidden).toBe(true);
+      expect(q<HTMLInputElement>('input[data-setting="voiceStyle"][value="natural"]').checked).toBe(true);
+
+      const device = q<HTMLInputElement>('input[data-setting="voiceStyle"][value="device"]');
+      device.checked = true;
+      change(device);
+      expect(store.updates).toContainEqual({ voiceStyle: 'device' });
+      expect(deviceRow.hidden).toBe(false);
+      expect(device.closest('.ks-row')?.textContent).toContain('child’s name');
+
+      const values = [...root.querySelectorAll<HTMLInputElement>('input[data-setting="speech"]')].map((i) => i.value);
+      expect(values).toEqual(['letter', 'word']);
+      const word = q<HTMLInputElement>('input[data-setting="speech"][value="word"]');
+      word.checked = true;
+      change(word);
+      expect(store.updates).toContainEqual({ speech: 'word' });
+      panel.destroy();
+    });
+
+    it('Hear it plays the test sound', () => {
+      const { panel, actions, q } = setup();
+      panel.open();
+      const hear = q<HTMLButtonElement>('[data-action="hear"]');
+      expect(hear.textContent).toContain('Hear it');
+      hear.click();
+      expect(actions.testSound).toHaveBeenCalledTimes(1);
+      panel.destroy();
+    });
+
+    it('dims and disables everything under the switch while the voice is off', () => {
+      const { panel, store, speaker, q } = setup();
+      store.update({ voiceStyle: 'device' });
+      panel.open();
+      const controls = () => [
+        ...root.querySelectorAll<HTMLInputElement>('input[data-setting="voiceStyle"], input[data-setting="speech"]'),
+        q<HTMLSelectElement>('select[data-setting="voiceURI"]'),
+        q<HTMLButtonElement>('[data-action="hear"]'),
+      ];
+      expect(controls().every((c) => !c.disabled)).toBe(true);
+      store.update({ voice: false });
+      expect(controls().every((c) => c.disabled)).toBe(true);
+      expect(q('select[data-setting="voiceURI"]').closest('.ks-row')?.classList.contains('is-disabled')).toBe(true);
+      expect(q<HTMLInputElement>('input[data-setting="voice"]').disabled).toBe(false);
+      // Voices arriving later keep the list disabled.
+      speaker.emitVoices();
+      expect(q<HTMLSelectElement>('select[data-setting="voiceURI"]').disabled).toBe(true);
+      store.update({ voice: true });
+      expect(controls().every((c) => !c.disabled)).toBe(true);
+      panel.destroy();
+    });
+  });
+
   it('lists voices and refreshes them when the speaker reports changes', () => {
     const { panel, speaker, store, q } = setup();
     panel.open();
@@ -685,7 +853,7 @@ describe('DomParentPanel', () => {
     panel.destroy();
   });
 
-  it('Learning section radios write mode, layout, speech and letterCase patches', () => {
+  it('Learning section radios write mode, layout and letterCase patches', () => {
     const { panel, store, q } = setup();
     panel.open();
     const learning = [...root.querySelectorAll<HTMLElement>('.ks-sec')].find((s) => s.textContent?.includes('Learning')) as HTMLElement;
@@ -698,7 +866,6 @@ describe('DomParentPanel', () => {
     const cases: Array<[string, string]> = [
       ['mode', 'spell'],
       ['layout', 'keyboard'],
-      ['speech', 'off'],
       ['letterCase', 'both'],
       ['intensity', 'lively'],
     ];
@@ -708,7 +875,7 @@ describe('DomParentPanel', () => {
       change(input);
       expect(store.updates).toContainEqual({ [setting]: value });
     }
-    expect(store.get()).toMatchObject({ mode: 'spell', layout: 'keyboard', speech: 'off', letterCase: 'both', intensity: 'lively' });
+    expect(store.get()).toMatchObject({ mode: 'spell', layout: 'keyboard', letterCase: 'both', intensity: 'lively' });
     panel.destroy();
   });
 

@@ -156,7 +156,7 @@ describe('Game: starting and stopping', () => {
   });
 
   it('start: requests lockdown first, unlocks audio, hides the start screen, enables inputs, greets and toasts', async () => {
-    const h = setup({ childName: 'Mia', confirmExit: true });
+    const h = setup({ childName: 'Mia', voiceStyle: 'device', confirmExit: true });
     h.start.deps.onStart();
     expect(h.lockdown.enters).toEqual([{ lockKeyboard: true }]);
     expect(h.audio.unlocks).toBeGreaterThan(0);
@@ -287,7 +287,7 @@ describe('Game: free play letters', () => {
     expect(h.audio.notes).toHaveLength(0);
     expect(h.audio.effects.at(-1)?.name).toBe('tap');
 
-    h.store.update({ speech: 'off' });
+    h.store.update({ voice: false });
     const said = h.speaker.said.length;
     h.press('KeyM', 'm');
     expect(h.speaker.said.length).toBe(said);
@@ -476,8 +476,8 @@ describe('Game: Space (rainbow) and Enter (clear)', () => {
     expect(h.scene.specialCount('rainbow')).toBe(2);
   });
 
-  it('Space with speech off still paints but says nothing', async () => {
-    const h = setup({ speech: 'off' });
+  it('Space with voice off still paints but says nothing', async () => {
+    const h = setup({ voice: false });
     await h.begin();
     h.press('Space', ' ');
     expect(h.scene.specialCount('rainbow')).toBe(1);
@@ -508,7 +508,7 @@ describe('Game: Space (rainbow) and Enter (clear)', () => {
   });
 
   it('cheers the child by name on Enter and roughly every 40 presses', async () => {
-    const h = setup({ childName: 'Mia' });
+    const h = setup({ childName: 'Mia', voiceStyle: 'device' });
     await h.begin();
     h.press('Enter', 'Enter');
     expect(h.speaker.lastSaid?.text).toBe('Yay, Mia!');
@@ -524,7 +524,7 @@ describe('Game: Space (rainbow) and Enter (clear)', () => {
 
 describe('Game: find letters', () => {
   it('start shows the prompt and sequences the greeting, then the prompt', async () => {
-    const h = setup({ mode: 'find-letters', childName: 'Leo' });
+    const h = setup({ mode: 'find-letters', childName: 'Leo', voiceStyle: 'device' });
     await h.begin();
     const ch = h.challenge();
     expect(ch.kind).toBe('find-letter');
@@ -1226,7 +1226,7 @@ describe('Game: fullscreen loss', () => {
 
 describe('Game: live settings and page visibility', () => {
   it('applies settings at boot', () => {
-    const h = setup({ world: 'night', volume: 0.4, speech: 'off', voiceURI: 'v1', secretWord: 'mommy', layout: 'keyboard' });
+    const h = setup({ world: 'night', volume: 0.4, voice: false, voiceURI: 'v1', secretWord: 'mommy', layout: 'keyboard' });
     expect(h.audio.volume).toBe(0.4);
     expect(h.audio.timbre).toBe(WORLDS.night.timbre);
     expect(h.audio.root).toBe(WORLDS.night.rootMidi);
@@ -1402,5 +1402,98 @@ describe('Game: review fixes', () => {
     expect(h.promptBar.lastShown).not.toBe(next);
     h.visibility.set(true);
     expect(h.promptBar.lastShown).toBe(next);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Voice on/off and voice style
+// ---------------------------------------------------------------------------
+
+describe('Game: voice switch and style', () => {
+  const NAME_LINE = /Mia/;
+
+  it('voice off: nothing at all is said (greeting, keys, rainbow, smash, test sound), notes still play', async () => {
+    const h = setup({ voice: false, childName: 'Mia', voiceStyle: 'device', mode: 'find-letters' });
+    expect(h.speaker.enabled).toBe(false);
+    await h.begin();
+    for (const [code, key] of [['KeyA', 'a'], ['Digit3', '3'], ['Enter', 'Enter'], ['Space', ' ']]) h.press(code, key, { gap: 3000 });
+    h.keyboard.handlers.onSmash({ codes: ['KeyA', 'KeyS', 'KeyD', 'KeyF'], center: null, time: h.clock.t });
+    h.run(5000);
+    h.panel.deps.actions.testSound();
+    expect(h.speaker.said).toHaveLength(0);
+    expect(h.speaker.sequences).toHaveLength(0);
+    expect(h.audio.effects.length + h.audio.notes.length).toBeGreaterThan(0);
+  });
+
+  it('turning the voice off and on mid-play disables and re-enables speech', async () => {
+    const h = setup({ speech: 'letter' });
+    await h.begin();
+    h.store.update({ voice: false });
+    expect(h.speaker.enabled).toBe(false);
+    const said = h.speaker.said.length;
+    h.press('KeyM', 'm');
+    expect(h.speaker.said.length).toBe(said);
+    h.store.update({ voice: true });
+    expect(h.speaker.enabled).toBe(true);
+    h.press('KeyM', 'm');
+    expect(h.speaker.lastSaid?.text).toBe('em');
+  });
+
+  it('mute also silences the voice', async () => {
+    const h = setup({ muted: true });
+    expect(h.speaker.enabled).toBe(false);
+    await h.begin();
+    expect(h.speaker.said).toHaveLength(0);
+  });
+
+  it('natural style never builds name lines: greeting, cheers, praise, test sound', async () => {
+    const h = setup({ childName: 'Mia', voiceStyle: 'natural' });
+    await h.begin();
+    expect(h.speaker.said[0]).toEqual({ text: "Let's play!", priority: 'high' });
+    h.press('Enter', 'Enter');
+    expect(h.speaker.lastSaid?.text).toBe('Yay!');
+    for (let i = 0; i < 20; i++) {
+      h.advance(3000);
+      h.keyboard.handlers.onSmash({ codes: ['KeyA', 'KeyS', 'KeyD', 'KeyF'], center: null, time: h.clock.t });
+    }
+    h.panel.deps.actions.testSound();
+    expect(h.speaker.lastSaid?.text).toBe('Hello!');
+    expect(h.speaker.texts.filter((t) => NAME_LINE.test(t))).toEqual([]);
+  });
+
+  it('natural style keeps game praise nameless too', async () => {
+    const h = setup({ mode: 'find-letters', childName: 'Mia', voiceStyle: 'natural' });
+    await h.begin();
+    for (let i = 0; i < 30; i++) {
+      pressTarget(h, (h.challenge() as { target: string | number }).target);
+      h.run(3000);
+    }
+    const all = [...h.speaker.texts, ...h.speaker.sequences.flatMap((s) => [...s.parts, s.then ?? ''])];
+    expect(all.filter((t) => NAME_LINE.test(t))).toEqual([]);
+  });
+
+  it('device style keeps the name lines', async () => {
+    const h = setup({ childName: 'Mia', voiceStyle: 'device' });
+    await h.begin();
+    expect(h.speaker.said[0].text).toBe('Hi, Mia!');
+    h.panel.deps.actions.testSound();
+    expect(h.speaker.lastSaid?.text).toBe('Hi, Mia!');
+  });
+
+  it('warms the voice right after unlocking audio on start', async () => {
+    const h = setup();
+    expect(h.speaker.warms).toBe(0);
+    await h.begin();
+    expect(h.speaker.warms).toBe(1);
+    expect(h.audio.unlocks).toBeGreaterThan(0);
+  });
+
+  it('applies the voice style at boot and when it changes', () => {
+    const h = setup({ voiceStyle: 'device' });
+    expect(h.speaker.styles).toEqual(['device']);
+    h.store.update({ voiceStyle: 'natural' });
+    expect(h.speaker.styles).toEqual(['device', 'natural']);
+    h.store.update({ volume: 0.5 });
+    expect(h.speaker.styles).toEqual(['device', 'natural']);
   });
 });

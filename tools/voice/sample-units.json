@@ -1,0 +1,19 @@
+[
+  { "key": "ay", "tts": "A" },
+  { "key": "bee", "tts": "B" },
+  { "key": "double you", "tts": "W" },
+  { "key": "ay… ay is for apple", "tts": "A… \"A\" is for apple" },
+  { "key": "bee… bee is for ball", "tts": "B… B is for ball" },
+  { "key": "eye… eye is for igloo", "tts": "I… \"I\" is for igloo" },
+  { "key": "three", "tts": "three" },
+  { "key": "three ducks!", "tts": "three ducks!" },
+  { "key": "zero — none!", "tts": "zero — none!" },
+  { "key": "blue circle", "tts": "blue circle" },
+  { "key": "can you find aitch?", "tts": "Can you find H?" },
+  { "key": "yes!", "tts": "Yes!" },
+  { "key": "that's queue!", "tts": "That's Q!" },
+  { "key": "now find you.", "tts": "Now find U." },
+  { "key": "let's spell cat. find see.", "tts": "Let's spell cat. Find C." },
+  { "key": "see, ay, tee… cat! you spelled cat!", "tts": "C, A, T… cat! You spelled cat!" },
+  { "key": "let's play!", "tts": "Let's play!" }
+]

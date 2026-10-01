@@ -4,8 +4,12 @@
  * Signal flow, built once on the first unlock() (which must come from a user gesture):
  *
  *   sources → envelopes → voice out (level) → panner ─┬─► dry ─────────────────┐
- *                                                     └─► send 12% → reverb ───┴─► master
- *   master (volume², mute) → fade (wind-down) → warmth lowpass → compressor → ceiling 0.8 → speakers
+ *                                                     └─► send 12% → reverb ───┴─► mix
+ *   mix → warmth lowpass → duck ─┐
+ *   speech clips → speech gain ──┴─► master (volume², mute) → fade (wind-down) → compressor → ceiling 0.8 → speakers
+ *
+ * Recorded speech (playVoice) skips the warmth lowpass and the reverb so words
+ * stay crisp, and while any clip plays the notes/music are ducked by ~6 dB.
  *
  * Protecting little ears: each voice's level is divided by √(onsets within 40 ms),
  * no more than 18 voices sound at once (the oldest is faded out fast), and a
@@ -13,7 +17,7 @@
  *
  * Before unlock() every method is a silent no-op, and no method ever throws.
  */
-import type { AudioEngine, NoteOptions, SoundEffect, Timbre } from '../types';
+import type { AudioEngine, NoteOptions, SoundEffect, Timbre, VoicePlayback } from '../types';
 
 // ---------------------------------------------------------------------------
 // Tuning
@@ -51,6 +55,14 @@ const PENTATONIC = [0, 2, 4, 7, 9];
 /** Soft bell triad (E5 G5 C6) and the "ta-da" arpeggio (C5 E5 G5 C6), in C; shifted by setRoot(). */
 /** Gentle master lowpass: keeps everything warm on laptop speakers. */
 const WARMTH_HZ = 6000;
+/** Level of recorded speech clips before master volume (clips are loudness-normalised). */
+const SPEECH_LEVEL = 0.6;
+/** Notes/music gain while speech plays (≈ -6 dB). */
+export const DUCK_LEVEL = 0.5;
+export const DUCK_DOWN = 0.04;
+export const DUCK_UP = 0.2;
+/** At most this many speech clips playing or scheduled; the oldest is stopped beyond it. */
+export const MAX_SPEECH = 8;
 
 // ---------------------------------------------------------------------------
 // Pure helpers (exported for tests)
@@ -461,6 +473,12 @@ export class WebAudioEngine implements AudioEngine {
   private resuming: Promise<void> | null = null;
   /** Building the graph failed once; stay silent rather than leak contexts. */
   private broken = false;
+  /** Speech clips enter here (bypasses warmth and reverb). */
+  private speech: GainNode | null = null;
+  /** Ducks the notes/music under speech. */
+  private duck: GainNode | null = null;
+  /** Speech clips playing or scheduled, oldest first (≤ MAX_SPEECH). */
+  private readonly speechPlaying: SpeechClip[] = [];
 
   get ready(): boolean {
     return this.ctx !== null && this.bus !== null && this.ctx.state === 'running';
@@ -570,6 +588,97 @@ export class WebAudioEngine implements AudioEngine {
     if (!ctx || !this.fade) return;
     try {
       rampTo(this.fade.gain, this.fadeLevel, ctx.currentTime, Number.isFinite(seconds) ? Math.max(0, seconds) : 0);
+    } catch {
+      // Never throw from audio.
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // VoiceOutput: recorded speech clips
+
+  currentTime(): number | null {
+    const ctx = this.ctx;
+    return ctx && this.bus ? ctx.currentTime : null;
+  }
+
+  decodeAudio(data: ArrayBuffer): Promise<AudioBuffer | null> {
+    const ctx = this.ctx;
+    if (!ctx || !this.bus || !(data instanceof ArrayBuffer) || data.byteLength === 0) return Promise.resolve(null);
+    return new Promise<AudioBuffer | null>((resolve) => {
+      try {
+        // Old Safari only supports the callback form; newer browsers return a promise too.
+        const result = ctx.decodeAudioData(
+          data,
+          (buffer) => resolve(buffer ?? null),
+          () => resolve(null),
+        ) as Promise<AudioBuffer> | undefined;
+        if (result && typeof result.then === 'function') result.then((b) => resolve(b ?? null), () => resolve(null));
+      } catch {
+        resolve(null);
+      }
+    });
+  }
+
+  playVoice(buffer: AudioBuffer, when?: number): VoicePlayback | null {
+    const ctx = this.live();
+    const speech = this.speech;
+    if (!ctx || !speech || !buffer || !(buffer.duration > 0)) return null;
+    try {
+      const now = ctx.currentTime;
+      const start = isFiniteNumber(when) ? Math.max(when, now) : now + LOOKAHEAD;
+      while (this.speechPlaying.length >= MAX_SPEECH) this.speechPlaying[0].stop();
+      const src = ctx.createBufferSource();
+      src.buffer = buffer;
+      src.connect(speech);
+      const clip = new SpeechClip(src, start, start + buffer.duration, (c, early) => {
+        const i = this.speechPlaying.indexOf(c);
+        if (i >= 0) this.speechPlaying.splice(i, 1);
+        if (early) this.updateDuck(); // natural ends are already covered by the scheduled ramp-up
+      });
+      src.start(start);
+      this.speechPlaying.push(clip);
+      this.updateDuck();
+      return clip;
+    } catch {
+      return null;
+    }
+  }
+
+  /** Speech clips playing or scheduled (diagnostics and tests). */
+  get activeSpeech(): number {
+    return this.speechPlaying.length;
+  }
+
+  /**
+   * Re-plans the duck automation: down (DUCK_DOWN s) to DUCK_LEVEL by the first
+   * clip's start, held to the last clip's end, then back up over DUCK_UP s.
+   */
+  private updateDuck(): void {
+    const ctx = this.ctx;
+    const duck = this.duck;
+    if (!ctx || !duck) return;
+    try {
+      const now = ctx.currentTime;
+      const g = duck.gain;
+      const current = g.value;
+      g.cancelScheduledValues(now);
+      g.setValueAtTime(current, now);
+      if (this.speechPlaying.length === 0) {
+        g.linearRampToValueAtTime(1, now + DUCK_UP);
+        return;
+      }
+      let first = Infinity;
+      let last = 0;
+      for (const c of this.speechPlaying) {
+        first = Math.min(first, c.startTime);
+        last = Math.max(last, c.endTime);
+      }
+      const downAt = Math.max(now + DUCK_DOWN, first);
+      if (downAt - DUCK_DOWN > now) g.setValueAtTime(current, downAt - DUCK_DOWN);
+      g.linearRampToValueAtTime(DUCK_LEVEL, downAt);
+      const upFrom = Math.max(last, downAt);
+      g.setValueAtTime(DUCK_LEVEL, upFrom);
+      g.linearRampToValueAtTime(1, upFrom + DUCK_UP);
     } catch {
       // Never throw from audio.
     }
@@ -751,18 +860,30 @@ export class WebAudioEngine implements AudioEngine {
     warmth.type = 'lowpass';
     warmth.frequency.value = WARMTH_HZ;
     warmth.Q.value = 0.5;
-    warmth.connect(limiter);
 
     const fade = ctx.createGain();
     fade.gain.value = this.fadeLevel;
-    fade.connect(warmth);
+    fade.connect(limiter);
 
     const master = ctx.createGain();
     master.gain.value = this.muted ? 0 : volumeToGain(this.volume);
     master.connect(fade);
 
+    // Speech: clips → speech gain → master (no warmth, no reverb).
+    const speech = ctx.createGain();
+    speech.gain.value = SPEECH_LEVEL;
+    speech.connect(master);
+
+    // Notes/music: bus (dry + reverb) → mix → warmth → duck → master.
+    const duck = ctx.createGain();
+    duck.gain.value = 1;
+    duck.connect(master);
+    warmth.connect(duck);
+    const mix = ctx.createGain();
+    mix.connect(warmth);
+
     const bus = ctx.createGain();
-    bus.connect(master); // dry path
+    bus.connect(mix); // dry path
     try {
       const reverb = ctx.createConvolver();
       reverb.buffer = makeImpulseResponse(ctx, REVERB_SECONDS);
@@ -770,7 +891,7 @@ export class WebAudioEngine implements AudioEngine {
       send.gain.value = REVERB_WET;
       bus.connect(send);
       send.connect(reverb);
-      reverb.connect(master);
+      reverb.connect(mix);
     } catch {
       // No reverb: the dry path still works.
     }
@@ -784,6 +905,8 @@ export class WebAudioEngine implements AudioEngine {
     this.master = master;
     this.fade = fade;
     this.bus = bus;
+    this.speech = speech;
+    this.duck = duck;
   }
 
   /** iOS only unlocks output once something actually plays inside the gesture. */
@@ -807,6 +930,53 @@ export class WebAudioEngine implements AudioEngine {
     this.fade = null;
     this.noiseBuffer = null;
     this.slots.fill(null);
+    this.speech = null;
+    this.duck = null;
+    for (const p of this.speechPlaying.slice()) p.finish();
+    this.speechPlaying.length = 0;
+  }
+}
+
+/** One speech clip (implements VoicePlayback). `onDone(clip, early)` runs exactly once. */
+class SpeechClip implements VoicePlayback {
+  readonly ended: Promise<void>;
+  private resolveEnded: () => void = noop;
+  private done = false;
+
+  constructor(
+    private readonly src: AudioBufferSourceNode,
+    readonly startTime: number,
+    readonly endTime: number,
+    private readonly onDone: (clip: SpeechClip, early: boolean) => void,
+  ) {
+    this.ended = new Promise<void>((resolve) => {
+      this.resolveEnded = resolve;
+    });
+    src.onended = () => this.finish(false);
+  }
+
+  stop(): void {
+    if (this.done) return;
+    try {
+      this.src.stop();
+    } catch {
+      // Not started yet or already stopped.
+    }
+    this.finish(true);
+  }
+
+  /** Releases the source and settles `ended`. Safe to call repeatedly. */
+  finish(early = true): void {
+    if (this.done) return;
+    this.done = true;
+    this.src.onended = null;
+    try {
+      this.src.disconnect();
+    } catch {
+      // Already disconnected.
+    }
+    this.resolveEnded();
+    this.onDone(this, early);
   }
 }
 
