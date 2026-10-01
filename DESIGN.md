@@ -171,7 +171,7 @@ and direction cards use `world.surface`. Layout (focus layout, centre card):
 | **Explore** | 1+ | Free play as above. |
 | **Find letters** | 3+ | Prompt bar: "Can you find **B**?" with its picture. Right key → celebrate, "Yes! That's bee!", next letter after ~1.2 s. Wrong key → its card still shows (small), gentle redirect "That's em. Can you find bee?" (rate-limited). After 2 wrong → mini keyboard shows where B is; after 4 → it pulses and the voice says where ("It's in the middle row"). Targets cycle so every letter comes up; letters found less often come up more (uses progress). |
 | **Find numbers** | 3+ | Same with 0–9 (number row and numpad both count). |
-| **Spell** | 4+ | A 3–4-letter picture word (cat, dog, sun, bus, hat, pig, cup, bed, fox, egg, bee, cow, owl, ant, car, map, jam, pen, box, fish, frog, duck, star, moon, cake, ball, tree, boat). Prompt shows the word's letters with the next one emphasised; each right letter fills in and is said; finishing says the whole word, then "You spelled cat!" + celebrate. Wrong letters are ignored gently (no penalty). |
+| **Spell** | 4+ | A 3–4-letter picture word (cat, dog, sun, bus, hat, pig, cup, bed, fox, egg, bee, cow, owl, ant, car, map, pen, box, fish, frog, duck, star, moon, cake, ball, tree, boat). Prompt shows the word's letters with the next one emphasised; each right letter fills in and is said; finishing says the whole word, then "You spelled cat!" + celebrate. Wrong letters are ignored gently (no penalty). |
 
 Games never fail, never time out, never show red X's. Smashing in a game is
 treated as free play (no wrong-answer spam).

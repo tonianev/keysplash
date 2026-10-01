@@ -1,14 +1,17 @@
 /**
- * Test doubles for Game and integration tests: every dependency records what
- * it was asked to do.
+ * Test doubles for Game and integration tests (v2 contracts): every dependency
+ * records what it was asked to do.
  */
 import type { MediaQueryListLike, VisibilitySource } from '../src/game';
 import type {
   AudioEngine,
+  CardSpec,
+  Challenge,
   EmojiSpec,
-  GlyphSpec,
+  HintLevel,
   KeyboardHandlers,
   KeyboardInput,
+  LearningProgress,
   LockStatus,
   Lockdown,
   NamedColor,
@@ -19,6 +22,8 @@ import type {
   PokeResult,
   PointerHandlers,
   PointerInput,
+  ProgressStore,
+  PromptBar,
   Scene,
   SceneOptions,
   ShapeSpec,
@@ -32,20 +37,29 @@ import type {
   World,
 } from '../src/types';
 
+export interface SpecialCall {
+  effect: SpecialEffect;
+  options?: { at?: { x: number; y: number }; colors?: NamedColor[] };
+}
+
 export class FakeScene implements Scene {
   objectCount = 0;
   worlds: World[] = [];
   options: SceneOptions[] = [];
   calm: number[] = [];
-  glyphs: GlyphSpec[] = [];
+  cards: Array<CardSpec & { id: number }> = [];
   shapes: ShapeSpec[] = [];
   emoji: EmojiSpec[] = [];
   bursts: Array<{ x: number; y: number; color: NamedColor; power?: number }> = [];
-  ripples: Array<{ x: number; y: number }> = [];
-  trails: Array<{ x: number; y: number; pointerId: number }> = [];
+  ripples: Array<{ x: number; y: number; color: NamedColor }> = [];
+  trails: Array<{ x: number; y: number; color: NamedColor; pointerId: number }> = [];
   endedTrails: number[] = [];
-  specials: Array<{ effect: SpecialEffect; at?: { x: number; y: number } }> = [];
-  pokeResult: PokeResult | null = null;
+  specials: SpecialCall[] = [];
+  pulses: number[] = [];
+  pokes: Array<{ x: number; y: number }> = [];
+  /** What poke() returns: a fixed result, or a function of the point. */
+  pokeResult: PokeResult | null | ((x: number, y: number) => PokeResult | null) = null;
+  private nextId = 1;
 
   setWorld(world: World): void {
     this.worlds.push(world);
@@ -56,8 +70,10 @@ export class FakeScene implements Scene {
   setCalm(level: number): void {
     this.calm.push(level);
   }
-  spawnGlyph(spec: GlyphSpec): void {
-    this.glyphs.push(spec);
+  showCard(spec: CardSpec): number {
+    const id = this.nextId++;
+    this.cards.push({ ...spec, id });
+    return id;
   }
   spawnShape(spec: ShapeSpec): void {
     this.shapes.push(spec);
@@ -68,30 +84,40 @@ export class FakeScene implements Scene {
   burst(x: number, y: number, color: NamedColor, power?: number): void {
     this.bursts.push({ x, y, color, power });
   }
-  ripple(x: number, y: number): void {
-    this.ripples.push({ x, y });
+  ripple(x: number, y: number, color: NamedColor): void {
+    this.ripples.push({ x, y, color });
   }
-  trail(x: number, y: number, _color: NamedColor, pointerId: number): void {
-    this.trails.push({ x, y, pointerId });
+  trail(x: number, y: number, color: NamedColor, pointerId: number): void {
+    this.trails.push({ x, y, color, pointerId });
   }
   endTrail(pointerId: number): void {
     this.endedTrails.push(pointerId);
   }
-  special(effect: SpecialEffect, at?: { x: number; y: number }): void {
-    this.specials.push({ effect, at });
+  special(effect: SpecialEffect, options?: SpecialCall['options']): void {
+    this.specials.push(options === undefined ? { effect } : { effect, options });
   }
-  poke(): PokeResult | null {
-    return this.pokeResult;
+  pulseCard(id: number): void {
+    this.pulses.push(id);
+  }
+  poke(x: number, y: number): PokeResult | null {
+    this.pokes.push({ x, y });
+    return typeof this.pokeResult === 'function' ? this.pokeResult(x, y) : this.pokeResult;
   }
   update(): void {}
   draw(): void {}
   resize(): void {}
 
+  get lastCard(): (CardSpec & { id: number }) | undefined {
+    return this.cards[this.cards.length - 1];
+  }
   get lastOptions(): SceneOptions {
     return this.options[this.options.length - 1];
   }
   get lastCalm(): number {
     return this.calm[this.calm.length - 1];
+  }
+  specialCount(effect: SpecialEffect): number {
+    return this.specials.filter((s) => s.effect === effect).length;
   }
 }
 
@@ -103,7 +129,7 @@ export class FakeAudio implements AudioEngine {
   timbre: Timbre | null = null;
   root: number | null = null;
   notes: Array<{ midi: number; options?: NoteOptions }> = [];
-  chords: number[][] = [];
+  chords: Array<{ midis: number[]; options?: NoteOptions & { spread?: number } }> = [];
   effects: Array<{ name: SoundEffect; options?: NoteOptions }> = [];
   fades: Array<[number, number]> = [];
 
@@ -126,8 +152,8 @@ export class FakeAudio implements AudioEngine {
   note(midi: number, options?: NoteOptions): void {
     this.notes.push({ midi, options });
   }
-  chord(midis: number[]): void {
-    this.chords.push(midis);
+  chord(midis: number[], options?: NoteOptions & { spread?: number }): void {
+    this.chords.push({ midis, options });
   }
   effect(name: SoundEffect, options?: NoteOptions): void {
     this.effects.push({ name, options });
@@ -144,13 +170,22 @@ export class FakeAudio implements AudioEngine {
   }
 }
 
+export interface SequenceCall {
+  parts: string[];
+  stepMs: number;
+  then: string | null | undefined;
+}
+
 export class FakeSpeaker implements Speaker {
   readonly supported = true;
   enabled = true;
   volume = 1;
   voice: string | null = null;
   cancels = 0;
+  /** Set by tests to simulate a sequence still running. */
+  sequencing = false;
   said: Array<{ text: string; priority: 'low' | 'high' }> = [];
+  sequences: SequenceCall[] = [];
 
   setEnabled(enabled: boolean): void {
     this.enabled = enabled;
@@ -170,11 +205,93 @@ export class FakeSpeaker implements Speaker {
   say(text: string, priority: 'low' | 'high' = 'low'): void {
     this.said.push({ text, priority });
   }
+  sequence(parts: string[], stepMs: number, then?: string | null): void {
+    this.sequences.push({ parts: [...parts], stepMs, then });
+  }
   cancel(): void {
     this.cancels++;
   }
   get texts(): string[] {
     return this.said.map((s) => s.text);
+  }
+  get lastSaid(): { text: string; priority: 'low' | 'high' } | undefined {
+    return this.said[this.said.length - 1];
+  }
+  get lastSequence(): SequenceCall | undefined {
+    return this.sequences[this.sequences.length - 1];
+  }
+}
+
+export type PromptCall =
+  | { op: 'show'; challenge: Challenge }
+  | { op: 'update'; challenge: Challenge; hint: HintLevel }
+  | { op: 'celebrate' }
+  | { op: 'hide' };
+
+export class FakePromptBar implements PromptBar {
+  isVisible = false;
+  calls: PromptCall[] = [];
+  show(challenge: Challenge): void {
+    this.isVisible = true;
+    this.calls.push({ op: 'show', challenge });
+  }
+  update(challenge: Challenge, hint: HintLevel): void {
+    this.calls.push({ op: 'update', challenge, hint });
+  }
+  celebrate(): void {
+    this.calls.push({ op: 'celebrate' });
+  }
+  hide(): void {
+    this.isVisible = false;
+    this.calls.push({ op: 'hide' });
+  }
+  ops(op: PromptCall['op']): PromptCall[] {
+    return this.calls.filter((c) => c.op === op);
+  }
+  get shown(): Challenge[] {
+    return this.calls.flatMap((c) => (c.op === 'show' ? [c.challenge] : []));
+  }
+  get lastShown(): Challenge | undefined {
+    const s = this.shown;
+    return s[s.length - 1];
+  }
+  get updates(): Array<{ challenge: Challenge; hint: HintLevel }> {
+    return this.calls.flatMap((c) => (c.op === 'update' ? [{ challenge: c.challenge, hint: c.hint }] : []));
+  }
+}
+
+export class FakeProgress implements ProgressStore {
+  data: LearningProgress = { seen: {}, found: {}, spelled: {}, since: null };
+  resets = 0;
+  private readonly listeners = new Set<(p: LearningProgress) => void>();
+  get(): LearningProgress {
+    return { seen: { ...this.data.seen }, found: { ...this.data.found }, spelled: { ...this.data.spelled }, since: this.data.since };
+  }
+  markSeen(symbol: string): void {
+    this.bump(this.data.seen, symbol);
+  }
+  markFound(symbol: string): void {
+    this.bump(this.data.found, symbol);
+  }
+  markSpelled(word: string): void {
+    this.bump(this.data.spelled, word);
+  }
+  reset(): void {
+    this.resets++;
+    this.data = { seen: {}, found: {}, spelled: {}, since: null };
+    this.notify();
+  }
+  subscribe(listener: (p: LearningProgress) => void): () => void {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  }
+  private bump(map: Record<string, number>, key: string): void {
+    map[key] = (map[key] ?? 0) + 1;
+    if (this.data.since === null) this.data.since = 1;
+    this.notify();
+  }
+  private notify(): void {
+    for (const l of [...this.listeners]) l(this.get());
   }
 }
 
@@ -221,6 +338,9 @@ export class FakeLockdown implements Lockdown {
     const changed = JSON.stringify(next) !== JSON.stringify(this.current);
     this.current = { ...next };
     if (changed) for (const l of [...this.listeners]) l(this.status());
+  }
+  get listenerCount(): number {
+    return this.listeners.size;
   }
 }
 
@@ -328,6 +448,9 @@ export class FakeVisibility implements VisibilitySource {
     this.visible = visible;
     for (const l of [...this.listeners]) l();
   }
+  get listenerCount(): number {
+    return this.listeners.size;
+  }
 }
 
 export class FakeQuery implements MediaQueryListLike {
@@ -343,11 +466,14 @@ export class FakeQuery implements MediaQueryListLike {
     this.matches = matches;
     this.listener?.();
   }
+  get hasListener(): boolean {
+    return this.listener !== null;
+  }
 }
 
-/** Lets pending promise callbacks run. */
-export function flush(): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, 0));
+/** Lets pending promise callbacks run. Works with real and fake timers (microtasks only). */
+export async function flush(): Promise<void> {
+  for (let i = 0; i < 10; i++) await Promise.resolve();
 }
 
 /** Deterministic LCG in [0, 1). */

@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
+import { MatteParticles, Paint, Rainbow, Ripples } from '../src/render/matte';
+import { TIMING } from '../src/types';
+import type { NamedColor } from '../src/types';
 import {
   approach,
+  clamp01,
+  smoothstep,
   clamp,
   easeInCubic,
   easeInOutSine,
@@ -11,8 +16,7 @@ import {
   lerp,
 } from '../src/render/easing';
 import { contrastRatio, darken, lighten, mix, parseHex, relativeLuminance, toHex, toRgba } from '../src/render/color';
-import { ColorTable, LruCache, sizeBucketIndex, sizeBucketPx } from '../src/render/sprites';
-import { Emitter, ParticlePool, PS_SPARK, RenderEnv } from '../src/render/particles';
+import { LruCache } from '../src/render/lru';
 import { chooseDpr } from '../src/render/stage';
 
 describe('easing', () => {
@@ -96,72 +100,6 @@ describe('color', () => {
   });
 });
 
-describe('ParticlePool', () => {
-  it('never exceeds capacity and overwrites the oldest particles first', () => {
-    const pool = new ParticlePool(100);
-    for (let i = 0; i < 350; i++) {
-      // Store the spawn serial in x so we can tell particles apart.
-      pool.spawn(i, 0, 0, 0, 10, 4, PS_SPARK, 0);
-      expect(pool.count).toBeLessThanOrEqual(100);
-    }
-    expect(pool.count).toBe(100);
-    const alive: number[] = [];
-    for (let i = 0; i < pool.capacity; i++) if (pool.isAlive(i)) alive.push(pool.x[i]);
-    alive.sort((a, b) => a - b);
-    // Only the 100 most recent survive: serials 250..349.
-    expect(alive.length).toBe(100);
-    expect(alive[0]).toBe(250);
-    expect(alive[99]).toBe(349);
-  });
-
-  it('expires particles by age and reuses their slots', () => {
-    const pool = new ParticlePool(8);
-    pool.spawn(0, 0, 10, 0, 0.5, 4, PS_SPARK, 0);
-    pool.spawn(0, 0, 10, 0, 2, 4, PS_SPARK, 0);
-    expect(pool.count).toBe(2);
-    pool.update(0.6);
-    expect(pool.count).toBe(1);
-    pool.update(2);
-    expect(pool.count).toBe(0);
-    for (let i = 0; i < 20; i++) pool.spawn(0, 0, 0, 0, 1, 4, PS_SPARK, 0);
-    expect(pool.count).toBe(8);
-    pool.clear();
-    expect(pool.count).toBe(0);
-  });
-
-  it('integrates velocity, drag and gravity', () => {
-    const pool = new ParticlePool(4);
-    const i = pool.spawn(0, 0, 100, 0, 5, 4, PS_SPARK, 0);
-    pool.ay[i] = 50;
-    pool.update(0.1);
-    expect(pool.x[i]).toBeCloseTo(10, 4);
-    expect(pool.vy[i]).toBeCloseTo(5, 4);
-    pool.drag[i] = 1;
-    const before = pool.vx[i];
-    pool.update(0.1);
-    expect(pool.vx[i]).toBeLessThan(before);
-  });
-
-  it('burst counts follow intensity, calm and reduced motion', () => {
-    const pool = new ParticlePool(16);
-    const env = new RenderEnv();
-    const emitter = new Emitter(pool, env, new ColorTable(8));
-    expect(emitter.burstCount(1)).toBe(18);
-    env.intensityMul = 1.6;
-    expect(emitter.burstCount(1)).toBe(29);
-    env.intensityMul = 1;
-    env.calm = 1;
-    expect(emitter.burstCount(1)).toBe(7);
-    env.calm = 0;
-    env.reduceMotion = true;
-    expect(emitter.burstCount(1)).toBe(5);
-    // A huge burst into a tiny pool stays bounded.
-    env.reduceMotion = false;
-    emitter.burst(0, 0, 0, 2);
-    expect(pool.count).toBeLessThanOrEqual(16);
-  });
-});
-
 describe('LruCache', () => {
   it('never exceeds its entry limit and evicts the least recently used', () => {
     const lru = new LruCache<string, number>(3);
@@ -208,42 +146,6 @@ describe('LruCache', () => {
   });
 });
 
-describe('ColorTable and size buckets', () => {
-  it('gives stable ids and recycles slots when full', () => {
-    const recycled: number[] = [];
-    const table = new ColorTable(3);
-    table.onRecycle = (id) => recycled.push(id);
-    const a = table.id('#ff0000');
-    expect(table.id('#ff0000')).toBe(a);
-    table.id('#00ff00');
-    table.id('#0000ff');
-    expect(table.size).toBe(3);
-    const d = table.id('#123456');
-    expect(table.size).toBe(3);
-    expect(recycled).toEqual([d]);
-    expect(table.hex(d)).toBe('#123456');
-  });
-
-  it('never recycles pinned colours', () => {
-    const table = new ColorTable(3);
-    const white = table.id('#ffffff');
-    table.pin(white);
-    table.id('#000001');
-    table.id('#000002');
-    for (let i = 3; i < 40; i++) table.id(`#0000${i.toString(16).padStart(2, '0')}`);
-    expect(table.size).toBe(3);
-    expect(table.hex(white)).toBe('#ffffff');
-    expect(table.id('#ffffff')).toBe(white);
-  });
-
-  it('size buckets stay within ±4% of the requested size', () => {
-    for (let px = 12; px < 1200; px *= 1.013) {
-      const b = sizeBucketPx(sizeBucketIndex(px));
-      expect(Math.abs(b / px - 1)).toBeLessThan(0.04);
-    }
-  });
-});
-
 describe('stage dpr', () => {
   it('caps at 2 and drops for very large viewports', () => {
     expect(chooseDpr(1440, 900, 2)).toBe(2);
@@ -252,5 +154,355 @@ describe('stage dpr', () => {
     expect(chooseDpr(2560, 1440, 2)).toBe(1.5);
     expect(chooseDpr(3440, 1440, 2)).toBe(1);
     expect(chooseDpr(800, 600, 0)).toBe(1);
+  });
+});
+
+describe('easing extras', () => {
+  it('clamp01 and smoothstep', () => {
+    expect(clamp01(-1)).toBe(0);
+    expect(clamp01(2)).toBe(1);
+    expect(clamp01(0.4)).toBe(0.4);
+    expect(smoothstep(0, 10, -5)).toBe(0);
+    expect(smoothstep(0, 10, 15)).toBe(1);
+    expect(smoothstep(0, 10, 5)).toBeCloseTo(0.5, 10);
+    expect(smoothstep(0, 10, 2)).toBeLessThan(0.2);
+  });
+
+  it('approach never overshoots for any step size', () => {
+    for (const step of [0.01, 0.5, 3, 100]) {
+      expect(approach(0, 1, step)).toBeLessThanOrEqual(1);
+      expect(approach(1, 0, step)).toBeGreaterThanOrEqual(0);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Recording fake 2D context (happy-dom has no canvas)
+// ---------------------------------------------------------------------------
+
+interface Rec {
+  ctx: CanvasRenderingContext2D;
+  calls: Array<{ name: string; args: unknown[]; alpha: number; stroke: unknown; fill: unknown }>;
+  composites: string[];
+  problems: string[];
+}
+
+function recorder(): Rec {
+  const rec: Rec = { ctx: null as unknown as CanvasRenderingContext2D, calls: [], composites: [], problems: [] };
+  const props: Record<string, unknown> = { globalAlpha: 1, lineWidth: 1, fillStyle: '#000', strokeStyle: '#000', globalCompositeOperation: 'source-over' };
+  rec.ctx = new Proxy({} as Record<string, unknown>, {
+    get(_t, prop) {
+      if (typeof prop !== 'string') return undefined;
+      if (prop in props) return props[prop];
+      return (...args: unknown[]) => {
+        for (const a of args) if (typeof a === 'number' && !Number.isFinite(a)) rec.problems.push(`${prop}(${a})`);
+        rec.calls.push({ name: prop, args, alpha: props.globalAlpha as number, stroke: props.strokeStyle, fill: props.fillStyle });
+        if (prop === 'createRadialGradient') rec.problems.push('createRadialGradient');
+        return undefined;
+      };
+    },
+    set(_t, prop, value) {
+      if (typeof prop !== 'string') return false;
+      if (prop === 'globalCompositeOperation') rec.composites.push(String(value));
+      if (prop === 'globalAlpha' && !(typeof value === 'number' && Number.isFinite(value))) rec.problems.push(`globalAlpha=${value}`);
+      props[prop] = value;
+      return true;
+    },
+  }) as unknown as CanvasRenderingContext2D;
+  return rec;
+}
+
+const count = (rec: Rec, name: string) => rec.calls.filter((c) => c.name === name).length;
+
+const RED: NamedColor = { name: 'red', hex: '#E0604F', container: '#FCE4E0', ink: '#A3291C' };
+const BLUE: NamedColor = { name: 'blue', hex: '#4A86D8', container: '#DFEAFB', ink: '#1D4F99' };
+const GREEN: NamedColor = { name: 'green', hex: '#4FA66A', container: '#DDF1E2', ink: '#1F6B37' };
+
+describe('MatteParticles', () => {
+  it('never exceeds capacity and overwrites the oldest first', () => {
+    const p = new MatteParticles(8);
+    for (let i = 0; i < 8; i++) p.spawn('dots', i, 0, 0, 0, 10, 4, 0);
+    expect(p.count).toBe(8);
+    for (let i = 0; i < 50; i++) {
+      p.spawn('confetti', 100 + i, 0, 0, 0, 10, 4, 0);
+      expect(p.count).toBeLessThanOrEqual(8);
+    }
+    expect(p.count).toBe(8);
+    // The 8 newest survive: x = 142…149.
+    const xs = Array.from(p.x).sort((a, b) => a - b);
+    expect(xs).toEqual([142, 143, 144, 145, 146, 147, 148, 149]);
+  });
+
+  it('expires by age, frees slots and clears', () => {
+    const p = new MatteParticles(4);
+    p.spawn('dots', 0, 0, 0, 0, 0.5, 4, 0);
+    p.spawn('dots', 0, 0, 0, 0, 2, 4, 0);
+    p.update(0.6, 0);
+    expect(p.count).toBe(1);
+    p.update(2, 0);
+    expect(p.count).toBe(0);
+    p.spawn('snow', 0, 0, 0, 0, 2, 4, 0);
+    p.clear();
+    expect(p.count).toBe(0);
+    const rec = recorder();
+    p.draw(rec.ctx, false);
+    expect(rec.calls).toHaveLength(0);
+  });
+
+  it('gravity pulls down, negative gravity floats up, drag slows', () => {
+    const p = new MatteParticles(2);
+    p.spawn('dots', 0, 0, 100, 0, 10, 4, 0);
+    p.spawn('bubbles', 0, 0, 0, 0, 10, 4, 0);
+    for (let i = 0; i < 30; i++) p.update(1 / 30, 50);
+    expect(p.y[0]).toBeGreaterThan(0);
+    expect(p.vx[0]).toBeLessThan(100);
+    expect(p.vx[0]).toBeGreaterThan(0);
+    const q = new MatteParticles(1);
+    q.spawn('bubbles', 0, 0, 0, 0, 10, 4, 0);
+    q.update(0.5, -40);
+    expect(q.y[0]).toBeLessThan(0);
+  });
+
+  it('draws every style flat, fading out, without additive blending', () => {
+    const p = new MatteParticles(16);
+    p.colors = [RED.hex, BLUE.hex];
+    const styles = ['confetti', 'dots', 'petals', 'bubbles', 'leaves', 'snow', 'stars'] as const;
+    styles.forEach((s, i) => p.spawn(s, i * 10, 0, 5, 5, 1, 6, i));
+    p.update(0.9, 10); // 90 % through: fading
+    const rec = recorder();
+    rec.ctx.globalAlpha = 0.5;
+    p.draw(rec.ctx, true);
+    expect(rec.problems).toEqual([]);
+    expect(rec.composites).not.toContain('lighter');
+    expect(count(rec, 'save')).toBe(count(rec, 'restore'));
+    const paints = rec.calls.filter((c) => c.name === 'fill' || c.name === 'stroke' || c.name === 'fillRect');
+    expect(paints.length).toBe(styles.length);
+    for (const c of paints) expect(c.alpha).toBeLessThan(0.5 * 0.5);
+    expect(rec.ctx.globalAlpha).toBe(0.5);
+    // Colour indices wrap into the palette.
+    for (const c of paints) expect([RED.hex, BLUE.hex, '#E6ECF5']).toContain(c.name === 'stroke' ? c.stroke : c.fill);
+  });
+});
+
+describe('Ripples', () => {
+  it('keeps at most 10 rings, fades them out and restores alpha', () => {
+    const r = new Ripples();
+    for (let i = 0; i < 50; i++) r.add(i, i, RED);
+    const rec = recorder();
+    r.draw(rec.ctx, 1);
+    expect(count(rec, 'stroke')).toBe(10);
+    for (const c of rec.calls.filter((k) => k.name === 'stroke')) expect(c.alpha).toBeLessThanOrEqual(0.4);
+    expect(rec.ctx.globalAlpha).toBe(1);
+    r.update(0.6);
+    const after = recorder();
+    r.draw(after.ctx, 1);
+    expect(count(after, 'stroke')).toBe(0);
+  });
+
+  it('rings expand over their life', () => {
+    const r = new Ripples();
+    r.add(0, 0, BLUE);
+    const radius = () => {
+      const rec = recorder();
+      r.draw(rec.ctx, 1);
+      return rec.calls.find((c) => c.name === 'arc')?.args[2] as number;
+    };
+    const a = radius();
+    r.update(0.2);
+    expect(radius()).toBeGreaterThan(a);
+  });
+});
+
+describe('Paint', () => {
+  const strokes = (paint: Paint): Rec['calls'] => {
+    const rec = recorder();
+    paint.draw(rec.ctx, 20);
+    expect(rec.problems).toEqual([]);
+    return rec.calls.filter((c) => c.name === 'stroke' || c.name === 'fill');
+  };
+
+  it('one pointer drawing in one colour is one stroke', () => {
+    const paint = new Paint();
+    for (let i = 0; i < 20; i++) paint.add(i * 5, 0, RED, 1);
+    const s = strokes(paint);
+    expect(s).toHaveLength(1);
+    expect(s[0].stroke).toBe(RED.hex);
+  });
+
+  it('a single point paints a dot', () => {
+    const paint = new Paint();
+    paint.add(10, 10, BLUE, 3);
+    const s = strokes(paint);
+    expect(s.map((c) => c.name)).toEqual(['fill']);
+  });
+
+  it('a new colour on the same pointer starts a new stroke', () => {
+    const paint = new Paint();
+    paint.add(0, 0, RED, 1);
+    paint.add(5, 0, RED, 1);
+    paint.add(10, 0, BLUE, 1);
+    paint.add(15, 0, BLUE, 1);
+    const s = strokes(paint);
+    expect(s).toHaveLength(2);
+    expect(s.map((c) => c.stroke)).toEqual([RED.hex, BLUE.hex]);
+  });
+
+  it('different pointers draw separate strokes', () => {
+    const paint = new Paint();
+    for (let i = 0; i < 3; i++) {
+      paint.add(i, 0, RED, 1);
+      paint.add(i, 50, RED, 2);
+    }
+    expect(strokes(paint)).toHaveLength(2);
+  });
+
+  it('a stroke ends after ~0.5 s idle, then fades out and disappears', () => {
+    const paint = new Paint();
+    paint.add(0, 0, RED, 1);
+    paint.add(5, 0, RED, 1);
+    paint.update(0.6); // idle: the stroke has ended
+    paint.add(10, 0, RED, 1); // same pointer, same colour → new stroke
+    paint.add(15, 0, RED, 1);
+    paint.update(0.3);
+    const s = strokes(paint);
+    expect(s).toHaveLength(2);
+    expect(s[0].alpha).toBeLessThan(s[1].alpha); // the ended one is fading
+    paint.update(0.6); // the second stroke goes idle too
+    paint.update(3.2);
+    expect(strokes(paint)).toHaveLength(0);
+  });
+
+  it('end() finishes only that pointer and the stroke fades', () => {
+    const paint = new Paint();
+    paint.add(0, 0, RED, 1);
+    paint.add(0, 0, BLUE, 2);
+    paint.end(1);
+    paint.update(0.3);
+    const s = strokes(paint);
+    const red = s.find((c) => c.fill === RED.hex);
+    const blue = s.find((c) => c.fill === BLUE.hex);
+    expect(red!.alpha).toBeLessThan(blue!.alpha);
+  });
+
+  it('never holds more than 10 strokes, and points per stroke are bounded', () => {
+    const paint = new Paint();
+    const colors = [RED, BLUE, GREEN];
+    for (let i = 0; i < 200; i++) {
+      for (let k = 0; k < 5; k++) paint.add(i, k, colors[i % 3], i % 17);
+      expect(strokes(paint).length).toBeLessThanOrEqual(10);
+    }
+    const long = new Paint();
+    for (let i = 0; i < 5000; i++) long.add(i, i, RED, 1);
+    const rec = recorder();
+    long.draw(rec.ctx, 10);
+    expect(count(rec, 'quadraticCurveTo')).toBeLessThan(200);
+    // The ring keeps the newest points: the stroke ends at the last one.
+    const last = rec.calls.filter((c) => c.name === 'lineTo').pop()!;
+    expect(last.args).toEqual([4999, 4999]);
+  });
+
+  it('clear() removes every stroke and draw restores alpha', () => {
+    const paint = new Paint();
+    paint.add(0, 0, RED, 1);
+    paint.add(1, 1, RED, 1);
+    const rec = recorder();
+    rec.ctx.globalAlpha = 0.7;
+    paint.draw(rec.ctx, 10);
+    expect(rec.ctx.globalAlpha).toBe(0.7);
+    expect(rec.composites).not.toContain('lighter');
+    paint.clear();
+    expect(strokes(paint)).toHaveLength(0);
+  });
+});
+
+describe('Rainbow', () => {
+  const SIX: NamedColor[] = ['red', 'orange', 'yellow', 'green', 'blue', 'purple'].map((name, i) => ({
+    name: name as NamedColor['name'],
+    hex: `#${(i + 1).toString(16).repeat(6)}`,
+    container: '#ffffff',
+    ink: '#000000',
+  }));
+  const bands = (r: Rainbow): string[] => {
+    const rec = recorder();
+    r.draw(rec.ctx, 1280, 800);
+    expect(rec.problems).toEqual([]);
+    expect(rec.composites).not.toContain('lighter');
+    return rec.calls.filter((c) => c.name === 'stroke').map((c) => c.stroke as string);
+  };
+
+  it('duration covers one band per TIMING.rainbowBandMs plus sweep, hold and fade', () => {
+    const r = new Rainbow();
+    r.start(SIX, false);
+    const step = TIMING.rainbowBandMs / 1000;
+    expect(r.duration()).toBeGreaterThan(5 * step);
+    expect(r.duration()).toBeLessThan(5 * step + 4);
+    const six = r.duration();
+    r.start(SIX.slice(0, 2), false);
+    expect(r.duration()).toBeCloseTo(six - 4 * step, 6); // fewer colours → shorter by whole steps
+  });
+
+  it('paints bands in order, one per step, then finishes', () => {
+    const r = new Rainbow();
+    expect(r.painting).toBe(false);
+    r.start(SIX, false);
+    expect(r.painting).toBe(true);
+    expect(bands(r)).toEqual([]);
+    const step = TIMING.rainbowBandMs / 1000;
+    r.update(0.01);
+    expect(bands(r)).toEqual([SIX[0].hex]);
+    r.update(step);
+    expect(bands(r)).toEqual([SIX[0].hex, SIX[1].hex]);
+    r.update(step * 4);
+    expect(bands(r)).toEqual(SIX.map((c) => c.hex));
+    r.update(r.duration());
+    expect(r.painting).toBe(false);
+    expect(bands(r)).toEqual([]);
+  });
+
+  it('follows the real clock when nowMs is given (low frame rates stay in step)', () => {
+    const r = new Rainbow();
+    r.start(SIX, false);
+    r.update(0.016, 10_000);
+    expect(bands(r)).toEqual([]);
+    r.update(0.016, 10_000 + TIMING.rainbowBandMs * 2 + 10); // one long frame
+    expect(bands(r)).toHaveLength(3);
+    r.update(0.016, 10_000 + r.duration() * 1000 + 1);
+    expect(r.painting).toBe(false);
+  });
+
+  it('is inert with no colours and caps the band count', () => {
+    const r = new Rainbow();
+    r.start([], false);
+    expect(r.painting).toBe(false);
+    const many = Array.from({ length: 20 }, (_, i) => SIX[i % 6]);
+    r.start(many, true);
+    r.update(r.duration() - 1); // every band painted, before the fade ends
+    expect(bands(r)).toHaveLength(8);
+  });
+
+  it('reduced motion fades bands in instead of sweeping', () => {
+    const r = new Rainbow();
+    r.start(SIX, true);
+    r.update(0.1);
+    const rec = recorder();
+    r.draw(rec.ctx, 1280, 800);
+    const arc = rec.calls.find((c) => c.name === 'arc')!;
+    expect(arc.args[4]).toBeCloseTo(2 * Math.PI); // full half-circle immediately
+    const stroke = rec.calls.find((c) => c.name === 'stroke')!;
+    expect(stroke.alpha).toBeLessThan(0.85);
+  });
+});
+
+describe('chooseDpr bounds', () => {
+  it('stays within [1, 2] for any viewport and junk ratios', () => {
+    for (const [w, h] of [[320, 480], [375, 667], [1920, 1080], [2560, 1440], [5120, 2880], [7680, 4320]]) {
+      for (const r of [0, -1, Number.NaN, Infinity, 1, 1.5, 2, 3, 4]) {
+        const d = chooseDpr(w, h, r);
+        expect(d).toBeGreaterThanOrEqual(1);
+        expect(d).toBeLessThanOrEqual(2);
+      }
+    }
+    expect(chooseDpr(375, 667, 3)).toBe(2); // phones get the 2× cap
+    expect(chooseDpr(5120, 2880, 2)).toBe(1); // 5K falls back to 1×
   });
 });

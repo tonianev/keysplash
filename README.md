@@ -23,7 +23,7 @@ calm: flat tonal colours, soft shadows, gentle motion.
 | arrows | an arrow card that glides that way | "up!" |
 | Space | a rainbow painted band by band | "red, orange, yellow, green, blue, purple" |
 | Enter / Backspace | cards glide away | "all clean!" |
-| everything else | a picture fixed per key (Shift → cow, Tab → rabbit…) | "cow" |
+| everything else | a picture fixed per key (F1 → cow, F2 → pig, Shift → bee…) | "cow" |
 
 Letters use **Andika**, a typeface designed for early readers (single-storey
 *a* and *g*, distinct *b d p q*, *I l 1*). Recent cards line up on a shelf at

@@ -147,7 +147,7 @@ function makeCanvas(w: number, h: number): HTMLCanvasElement | null {
 export function cardKey(spec: CardSpec, w: number, h: number, style: CardStyle): string {
   return [
     spec.kind, spec.text ?? '', spec.picture ?? '', spec.word ?? '', spec.highlight?.join('-') ?? '',
-    spec.shape ?? '', spec.direction ?? '', spec.color?.container ?? '', spec.color?.ink ?? '',
+    spec.shape ?? '', spec.direction ?? '', spec.color?.hex ?? '', spec.color?.container ?? '', spec.color?.ink ?? '',
     style.world.id, Math.round(w), Math.round(h), style.dpr, style.fontFamily,
   ].join('|');
 }

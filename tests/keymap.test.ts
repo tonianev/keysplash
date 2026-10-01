@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { keyMap, knownKeyCodes, pentatonic } from '../src/keymap';
+import { KEYBOARD_ROWS, describeKeyLocation, keyMap, knownKeyCodes, pentatonic } from '../src/keymap';
 import { WORLDS } from '../src/worlds';
 
 const SCALE = new Set([0, 2, 4, 7, 9]);
@@ -154,5 +154,72 @@ describe('keyMap.note', () => {
 
   it('survives a bad root', () => {
     expect(keyMap.note('KeyG', Number.NaN)).toBe(60);
+  });
+});
+
+describe('KEYBOARD_ROWS', () => {
+  it('is digits, QWERTY rows and Space, frozen', () => {
+    expect(KEYBOARD_ROWS.map((r) => r.length)).toEqual([10, 10, 9, 7, 1]);
+    expect(KEYBOARD_ROWS[0][0]).toBe('Digit1');
+    expect(KEYBOARD_ROWS[0][9]).toBe('Digit0');
+    expect(KEYBOARD_ROWS[1].join(',')).toBe('KeyQ,KeyW,KeyE,KeyR,KeyT,KeyY,KeyU,KeyI,KeyO,KeyP');
+    expect(KEYBOARD_ROWS[2][0]).toBe('KeyA');
+    expect(KEYBOARD_ROWS[3][6]).toBe('KeyM');
+    expect(KEYBOARD_ROWS[4]).toEqual(['Space']);
+    expect(Object.isFrozen(KEYBOARD_ROWS)).toBe(true);
+    for (const row of KEYBOARD_ROWS) expect(Object.isFrozen(row)).toBe(true);
+  });
+
+  it('contains every letter and digit exactly once, all with known positions', () => {
+    const flat = KEYBOARD_ROWS.flat();
+    expect(new Set(flat).size).toBe(flat.length);
+    for (const c of 'ABCDEFGHIJKLMNOPQRSTUVWXYZ') expect(flat).toContain(`Key${c}`);
+    for (let d = 0; d <= 9; d++) expect(flat).toContain(`Digit${d}`);
+    for (const code of flat) expect(keyMap.position(code), code).not.toBeNull();
+  });
+
+  it('rows run top to bottom and left to right on the physical keyboard', () => {
+    for (let r = 0; r < KEYBOARD_ROWS.length; r++) {
+      const row = KEYBOARD_ROWS[r];
+      for (let i = 1; i < row.length; i++) {
+        expect(keyMap.position(row[i])!.x).toBeGreaterThan(keyMap.position(row[i - 1])!.x);
+      }
+      if (r > 0) expect(keyMap.position(row[0])!.y).toBeGreaterThan(keyMap.position(KEYBOARD_ROWS[r - 1][0])!.y);
+    }
+  });
+});
+
+describe('describeKeyLocation', () => {
+  it('names the row and side', () => {
+    expect(describeKeyLocation('KeyQ')).toBe('It is in the top row, on the left.');
+    expect(describeKeyLocation('KeyP')).toBe('It is in the top row, on the right.');
+    expect(describeKeyLocation('KeyG')).toBe('It is in the middle row, in the middle.');
+    expect(describeKeyLocation('KeyA')).toBe('It is in the middle row, on the left.');
+    expect(describeKeyLocation('KeyL')).toBe('It is in the middle row, on the right.');
+    expect(describeKeyLocation('KeyZ')).toBe('It is in the bottom row, on the left.');
+    expect(describeKeyLocation('KeyM')).toBe('It is in the bottom row, on the right.');
+    expect(describeKeyLocation('Digit1')).toBe('It is on the number row, on the left.');
+    expect(describeKeyLocation('Digit5')).toBe('It is on the number row, in the middle.');
+    expect(describeKeyLocation('Digit0')).toBe('It is on the number row, on the right.');
+  });
+
+  it('describes numpad digits like the number row', () => {
+    for (let d = 0; d <= 9; d++) expect(describeKeyLocation(`Numpad${d}`)).toBe(describeKeyLocation(`Digit${d}`));
+  });
+
+  it('describes Space as the long key at the bottom', () => {
+    expect(describeKeyLocation('Space')).toBe('It is the long key at the bottom.');
+  });
+
+  it('falls back gently for keys outside the diagram', () => {
+    for (const code of ['Enter', 'NumpadAdd', 'F1', '', 'Bogus']) {
+      expect(describeKeyLocation(code)).toBe('Look carefully at the keys.');
+    }
+  });
+
+  it('gives every letter a sentence with a row', () => {
+    for (const c of 'ABCDEFGHIJKLMNOPQRSTUVWXYZ') {
+      expect(describeKeyLocation(`Key${c}`)).toMatch(/^It is in the (top|middle|bottom) row, (on the left|in the middle|on the right)\.$/);
+    }
   });
 });

@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type {
+  LearningProgress,
   LockStatus,
   ParentPanelDeps,
+  ProgressStore,
   SessionStats,
   Settings,
   SettingsStore,
@@ -21,6 +23,8 @@ import { InstallPrompt } from '../src/ui/install';
 
 const BASE_SETTINGS: Settings = {
   world: 'space',
+  mode: 'explore',
+  layout: 'focus',
   autoRotate: false,
   rotateMinutes: 5,
   volume: 0.7,
@@ -35,7 +39,6 @@ const BASE_SETTINGS: Settings = {
   motion: 'system',
   trails: true,
   faces: true,
-  spatialKeys: true,
   childName: '',
   sessionMinutes: 0,
   secretWord: 'parent',
@@ -77,14 +80,16 @@ function world(id: WorldId, label: string, icon: string): World {
     id,
     label,
     icon,
-    background: 'starfield',
+    background: 'space',
     sky: ['#000', '#111'],
     dark: true,
-    palette: [{ name: 'red', hex: '#ff0000' }],
-    particle: 'spark',
+    surface: '#222',
+    onSurface: '#eee',
+    palette: [{ name: 'red', hex: '#c44', container: '#411', ink: '#fcc' }],
+    particle: 'stars',
     gravity: 0,
     energy: 1,
-    timbre: 'bell',
+    timbre: 'celesta',
     rootMidi: 60,
     friends: ['⭐'],
   };
@@ -112,7 +117,49 @@ class FakeSpeaker implements Speaker {
     for (const listener of this.listeners) listener();
   }
   say(): void {}
+  sequence(): void {}
+  readonly sequencing = false;
   cancel(): void {}
+}
+
+class MemoryProgress implements ProgressStore {
+  private data: LearningProgress = { seen: {}, found: {}, spelled: {}, since: null };
+  private readonly listeners = new Set<(p: LearningProgress) => void>();
+  resets = 0;
+  get(): LearningProgress {
+    return this.data;
+  }
+  private bump(field: 'seen' | 'found' | 'spelled', key: string): void {
+    const bucket = { ...this.data[field], [key]: (this.data[field][key] ?? 0) + 1 };
+    this.data = { ...this.data, [field]: bucket, since: this.data.since ?? Date.UTC(2026, 0, 15) };
+    this.emit();
+  }
+  markSeen(symbol: string): void {
+    this.bump('seen', symbol);
+  }
+  markFound(symbol: string): void {
+    this.bump('found', symbol);
+  }
+  markSpelled(word: string): void {
+    this.bump('spelled', word);
+  }
+  reset(): void {
+    this.resets++;
+    this.data = { seen: {}, found: {}, spelled: {}, since: null };
+    this.emit();
+  }
+  subscribe(listener: (p: LearningProgress) => void): () => void {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
+  }
+  get listenerCount(): number {
+    return this.listeners.size;
+  }
+  private emit(): void {
+    for (const listener of this.listeners) listener(this.data);
+  }
 }
 
 function key(type: 'keydown' | 'keyup', k: string, init: KeyboardEventInit = {}): KeyboardEvent {
@@ -266,6 +313,108 @@ describe('DomStartScreen', () => {
     screen.destroy();
   });
 
+  it('renders the four activity cards with aria-checked from the store', () => {
+    const { screen, q } = setup({ mode: 'spell' });
+    const group = q<HTMLElement>('.ks-modes');
+    expect(group.getAttribute('role')).toBe('radiogroup');
+    const cards = [...root.querySelectorAll<HTMLButtonElement>('.ks-mode')];
+    expect(cards.map((c) => c.dataset.mode)).toEqual(['explore', 'find-letters', 'find-numbers', 'spell']);
+    for (const card of cards) {
+      expect(card.getAttribute('role')).toBe('radio');
+      expect(card.getAttribute('aria-checked')).toBe(String(card.dataset.mode === 'spell'));
+      expect(card.classList.contains('is-selected')).toBe(card.dataset.mode === 'spell');
+    }
+    screen.destroy();
+  });
+
+  it('clicking a mode card updates the store without starting play', () => {
+    const { store, onStart, screen, q } = setup();
+    const card = q<HTMLButtonElement>('.ks-mode[data-mode="find-numbers"]');
+    card.click();
+    expect(onStart).not.toHaveBeenCalled();
+    expect(store.updates).toEqual([{ mode: 'find-numbers' }]);
+    expect(card.getAttribute('aria-checked')).toBe('true');
+    expect(q('.ks-mode[data-mode="explore"]').getAttribute('aria-checked')).toBe('false');
+    // Re-clicking the selected card writes nothing.
+    card.click();
+    expect(store.updates).toHaveLength(1);
+    // A click on a child element of a card (the icon) still selects, and still does not start.
+    q<HTMLElement>('.ks-mode[data-mode="spell"] .ks-mode__icon').click();
+    expect(store.get().mode).toBe('spell');
+    expect(onStart).not.toHaveBeenCalled();
+    screen.destroy();
+  });
+
+  it('mode cards follow external store changes', () => {
+    const { store, screen, q } = setup();
+    store.update({ mode: 'find-letters' });
+    expect(q('.ks-mode[data-mode="find-letters"]').getAttribute('aria-checked')).toBe('true');
+    expect(q('.ks-mode[data-mode="explore"]').getAttribute('aria-checked')).toBe('false');
+    screen.destroy();
+  });
+
+  it('renders one world swatch per world with roving tabindex', () => {
+    const { screen } = setup({ world: 'ocean' });
+    const swatches = [...root.querySelectorAll<HTMLButtonElement>('.ks-world')];
+    expect(swatches.map((b) => b.dataset.world)).toEqual(['space', 'ocean', 'garden']);
+    expect(swatches.map((b) => b.getAttribute('aria-label'))).toEqual(['Outer Space', 'Under the Sea', 'Garden']);
+    expect(swatches.map((b) => b.tabIndex)).toEqual([-1, 0, -1]);
+    screen.destroy();
+  });
+
+  it('a click on the empty backdrop starts, a click inside [data-no-start] does not', () => {
+    const { onStart, screen, q } = setup();
+    q<HTMLElement>('.ks-modes').click();
+    q<HTMLElement>('.ks-worlds').click();
+    q<HTMLElement>('.ks-start__foot').click();
+    expect(onStart).not.toHaveBeenCalled();
+    q<HTMLElement>('.ks-start__subtitle').click();
+    expect(onStart).toHaveBeenCalledTimes(1);
+    screen.destroy();
+  });
+
+  it('ignores function/media keys, auto-repeat and Alt chords; digits and Space start', () => {
+    vi.useFakeTimers();
+    const { onStart, screen } = setup();
+    for (const k of ['F5', 'F12', 'AudioVolumeUp', 'MediaPlayPause', 'BrightnessUp']) window.dispatchEvent(key('keydown', k));
+    window.dispatchEvent(key('keydown', 'a', { repeat: true }));
+    window.dispatchEvent(key('keydown', 'a', { altKey: true }));
+    expect(onStart).not.toHaveBeenCalled();
+    window.dispatchEvent(key('keydown', '7', { code: 'Digit7' }));
+    expect(onStart).toHaveBeenCalledTimes(1);
+    vi.advanceTimersByTime(1000);
+    window.dispatchEvent(key('keydown', ' ', { code: 'Space' }));
+    expect(onStart).toHaveBeenCalledTimes(2);
+    screen.destroy();
+  });
+
+  it('a burst of keys starts play only once (restart guard)', () => {
+    const { onStart, screen } = setup();
+    for (const k of 'asdfgh') window.dispatchEvent(key('keydown', k));
+    expect(onStart).toHaveBeenCalledTimes(1);
+    screen.destroy();
+  });
+
+  it('Enter on a focused mode card selects natively and does not start', () => {
+    const { onStart, screen, q } = setup();
+    const card = q<HTMLButtonElement>('.ks-mode[data-mode="spell"]');
+    card.focus();
+    const event = key('keydown', 'Enter');
+    card.dispatchEvent(event);
+    expect(onStart).not.toHaveBeenCalled();
+    expect(event.defaultPrevented).toBe(false);
+    screen.destroy();
+  });
+
+  it('destroy() unsubscribes from the store and removes the element', () => {
+    const { store, onStart, screen } = setup();
+    screen.destroy();
+    expect(root.querySelector('.ks-start')).toBeNull();
+    expect(() => store.update({ childName: 'Zed' })).not.toThrow();
+    window.dispatchEvent(key('keydown', 'a'));
+    expect(onStart).not.toHaveBeenCalled();
+  });
+
   it('mirrors the motion setting onto <html data-motion>', () => {
     const { store, screen } = setup({ motion: 'reduce' });
     expect(document.documentElement.dataset.motion).toBe('reduce');
@@ -283,17 +432,20 @@ describe('DomParentPanel', () => {
   function setup(opts: { canInstall?: boolean; stats?: Partial<SessionStats>; status?: Partial<LockStatus> } = {}) {
     const store = new MemoryStore();
     const speaker = new FakeSpeaker();
+    const progress = new MemoryProgress();
     const actions = {
       resume: vi.fn(),
       stop: vi.fn(),
       relock: vi.fn(),
       testSound: vi.fn(),
       resetStats: vi.fn(),
+      resetProgress: vi.fn(() => progress.reset()),
       install: vi.fn(),
     };
     let canInstall = opts.canInstall ?? false;
     const deps: ParentPanelDeps = {
       store,
+      progress,
       worlds: WORLDS,
       speaker,
       getStats: () => ({
@@ -301,6 +453,8 @@ describe('DomParentPanel', () => {
         keys: 42,
         taps: 7,
         smashes: 3,
+        found: 5,
+        spelled: 2,
         topKeys: [
           ['A', 12],
           ['Space', 9],
@@ -317,7 +471,7 @@ describe('DomParentPanel', () => {
     const setCanInstall = (v: boolean) => {
       canInstall = v;
     };
-    return { store, speaker, actions, panel, q, setCanInstall };
+    return { store, speaker, progress, actions, panel, q, setCanInstall };
   }
 
   function change(input: HTMLInputElement | HTMLSelectElement, type: 'change' | 'input' = 'change'): void {
@@ -393,10 +547,8 @@ describe('DomParentPanel', () => {
     change(muted);
     expect(store.updates).toContainEqual({ muted: true });
 
-    const spatial = q<HTMLInputElement>('input[data-setting="spatialKeys"]');
-    spatial.checked = false;
-    change(spatial);
-    expect(store.updates).toContainEqual({ spatialKeys: false });
+    // v2 dropped the spatialKeys setting: no control may write it.
+    expect(root.querySelector('[data-setting="spatialKeys"]')).toBeNull();
     panel.destroy();
   });
 
@@ -533,6 +685,245 @@ describe('DomParentPanel', () => {
     panel.destroy();
   });
 
+  it('Learning section radios write mode, layout, speech and letterCase patches', () => {
+    const { panel, store, q } = setup();
+    panel.open();
+    const learning = [...root.querySelectorAll<HTMLElement>('.ks-sec')].find((s) => s.textContent?.includes('Learning')) as HTMLElement;
+    expect(learning).toBeDefined();
+    expect(learning.querySelector('[data-setting="mode"]')).not.toBeNull();
+    const modes = [...learning.querySelectorAll<HTMLInputElement>('input[data-setting="mode"]')].map((i) => i.value);
+    expect(modes).toEqual(['explore', 'find-letters', 'find-numbers', 'spell']);
+    expect(q<HTMLInputElement>('input[data-setting="mode"][value="explore"]').checked).toBe(true);
+
+    const cases: Array<[string, string]> = [
+      ['mode', 'spell'],
+      ['layout', 'keyboard'],
+      ['speech', 'off'],
+      ['letterCase', 'both'],
+      ['intensity', 'lively'],
+    ];
+    for (const [setting, value] of cases) {
+      const input = q<HTMLInputElement>(`input[data-setting="${setting}"][value="${value}"]`);
+      input.checked = true;
+      change(input);
+      expect(store.updates).toContainEqual({ [setting]: value });
+    }
+    expect(store.get()).toMatchObject({ mode: 'spell', layout: 'keyboard', speech: 'off', letterCase: 'both', intensity: 'lively' });
+    panel.destroy();
+  });
+
+  it('an unchecked radio change event writes nothing', () => {
+    const { panel, store, q } = setup();
+    panel.open();
+    const input = q<HTMLInputElement>('input[data-setting="layout"][value="keyboard"]');
+    input.checked = false;
+    change(input);
+    expect(store.updates).toEqual([]);
+    panel.destroy();
+  });
+
+  it('radios reflect external store changes while open', () => {
+    const { panel, store, q } = setup();
+    panel.open();
+    store.update({ mode: 'find-letters', layout: 'keyboard' });
+    expect(q<HTMLInputElement>('input[data-setting="mode"][value="find-letters"]').checked).toBe(true);
+    expect(q<HTMLInputElement>('input[data-setting="mode"][value="explore"]').checked).toBe(false);
+    expect(q<HTMLInputElement>('input[data-setting="layout"][value="keyboard"]').checked).toBe(true);
+    panel.destroy();
+  });
+
+  it('progress grid shows none/seen/found per symbol from the store on open', () => {
+    const { panel, progress, q } = setup();
+    progress.markSeen('A');
+    progress.markSeen('B');
+    progress.markFound('B');
+    progress.markSeen('7');
+    panel.open();
+    const cells = [...root.querySelectorAll<HTMLElement>('.ks-progress__cell')];
+    expect(cells).toHaveLength(36);
+    expect(cells.map((c) => c.dataset.symbol).join('')).toBe('ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789');
+    expect(q<HTMLElement>('[data-symbol="A"]').dataset.state).toBe('seen');
+    expect(q<HTMLElement>('[data-symbol="B"]').dataset.state).toBe('found');
+    expect(q<HTMLElement>('[data-symbol="7"]').dataset.state).toBe('seen');
+    expect(q<HTMLElement>('[data-symbol="C"]').dataset.state).toBe('none');
+    expect(q<HTMLElement>('[data-symbol="B"]').getAttribute('aria-label')).toContain('found 1');
+    panel.destroy();
+  });
+
+  it('progress grid live-updates via progress.subscribe while open, not while closed', () => {
+    const { panel, progress, q } = setup();
+    panel.open();
+    const z = q<HTMLElement>('[data-symbol="Z"]');
+    expect(z.dataset.state).toBe('none');
+    progress.markSeen('Z');
+    expect(z.dataset.state).toBe('seen');
+    progress.markFound('Z');
+    expect(z.dataset.state).toBe('found');
+
+    panel.close();
+    progress.markSeen('Q');
+    expect(q<HTMLElement>('[data-symbol="Q"]').dataset.state).toBe('none');
+    panel.open(); // re-reads on open
+    expect(q<HTMLElement>('[data-symbol="Q"]').dataset.state).toBe('seen');
+    panel.destroy();
+  });
+
+  it('lists spelled words as chips, most spelled first', () => {
+    const { panel, progress } = setup();
+    panel.open();
+    const words = () => [...root.querySelectorAll('.ks-progress ~ .ks-topkeys .ks-topkey__key')].map((n) => n.textContent);
+    expect(root.textContent).toContain('None yet');
+    progress.markSpelled('cat');
+    progress.markSpelled('dog');
+    progress.markSpelled('dog');
+    expect(words()).toEqual(['dog', 'cat']);
+    expect(root.textContent).toContain('Since');
+    panel.destroy();
+  });
+
+  it('Reset progress needs the inline confirm before calling resetProgress', () => {
+    const { panel, progress, actions, q } = setup();
+    progress.markFound('A');
+    panel.open();
+    const confirm = q<HTMLElement>('.ks-confirm');
+    expect(confirm.hidden).toBe(true);
+    q<HTMLButtonElement>('[data-action="reset-progress"]').click();
+    expect(actions.resetProgress).not.toHaveBeenCalled();
+    expect(confirm.hidden).toBe(false);
+
+    // Cancel hides it again without resetting.
+    [...confirm.querySelectorAll('button')].find((b) => b.textContent === 'Cancel')?.click();
+    expect(confirm.hidden).toBe(true);
+    expect(actions.resetProgress).not.toHaveBeenCalled();
+
+    q<HTMLButtonElement>('[data-action="reset-progress"]').click();
+    q<HTMLButtonElement>('[data-action="reset-progress-confirm"]').click();
+    expect(actions.resetProgress).toHaveBeenCalledTimes(1);
+    expect(confirm.hidden).toBe(true);
+    expect(q<HTMLElement>('[data-symbol="A"]').dataset.state).toBe('none');
+    panel.destroy();
+  });
+
+  it('a pending reset confirm is dismissed when the panel is reopened', () => {
+    const { panel, q } = setup();
+    panel.open();
+    q<HTMLButtonElement>('[data-action="reset-progress"]').click();
+    panel.close();
+    panel.open();
+    expect(q<HTMLElement>('.ks-confirm').hidden).toBe(true);
+    panel.destroy();
+  });
+
+  it('session stats show found and words spelled', () => {
+    const { panel } = setup({ stats: { found: 11, spelled: 4 } });
+    panel.open();
+    const tiles = new Map(
+      [...root.querySelectorAll('.ks-stat')].map((t) => [t.querySelector('dt')?.textContent, t.querySelector('dd')?.textContent]),
+    );
+    expect(tiles.get('Found')).toBe('11');
+    expect(tiles.get('Words spelled')).toBe('4');
+    expect(tiles.get('Keys')).toBe('42');
+    panel.destroy();
+  });
+
+  it('secret word: trims, rejects impossible input while typing, and saves on Enter', () => {
+    const { panel, store, q } = setup();
+    panel.open();
+    const input = q<HTMLInputElement>('input[data-setting="secretWord"]');
+    const error = q<HTMLElement>('.ks-field__error');
+    input.value = 'ab1';
+    change(input, 'input');
+    expect(error.hidden).toBe(false);
+    input.value = 'abc';
+    change(input, 'input'); // too short is only flagged on commit
+    expect(error.hidden).toBe(true);
+    input.value = '  Mango  ';
+    input.dispatchEvent(key('keydown', 'Enter'));
+    expect(store.get().secretWord).toBe('mango');
+    expect(input.value).toBe('mango');
+    expect(q('.ks-field__saved').textContent).toContain('Saved');
+    panel.destroy();
+  });
+
+  it('a valid but uncommitted secret word is saved when the panel closes', () => {
+    const { panel, store, q } = setup();
+    panel.open();
+    const input = q<HTMLInputElement>('input[data-setting="secretWord"]');
+    input.value = 'grownup';
+    panel.close();
+    expect(store.get().secretWord).toBe('grownup');
+    panel.destroy();
+  });
+
+  it('Escape is swallowed by the panel (stopPropagation) and does nothing once closed', () => {
+    const { panel, actions } = setup();
+    panel.open();
+    const bubbled = vi.fn();
+    window.addEventListener('keydown', bubbled);
+    const event = key('keydown', 'Escape');
+    window.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(true);
+    expect(bubbled).not.toHaveBeenCalled();
+    window.removeEventListener('keydown', bubbled);
+    window.dispatchEvent(key('keydown', 'Escape'));
+    expect(actions.resume).toHaveBeenCalledTimes(1);
+    panel.destroy();
+  });
+
+  it('traps Tab focus inside the dialog', () => {
+    const { panel, q } = setup();
+    panel.open();
+    const dialog = q<HTMLElement>('[role="dialog"]');
+    const close = q<HTMLButtonElement>('.ks-iconbtn');
+    const keep = q<HTMLButtonElement>('[data-action="resume"]');
+    // From the dialog itself, Tab goes to the first control, Shift+Tab to the last.
+    const tab = key('keydown', 'Tab');
+    window.dispatchEvent(tab);
+    expect(tab.defaultPrevented).toBe(true);
+    expect(document.activeElement).toBe(close);
+    keep.focus();
+    window.dispatchEvent(key('keydown', 'Tab'));
+    expect(document.activeElement).toBe(close);
+    window.dispatchEvent(key('keydown', 'Tab', { shiftKey: true }));
+    expect(document.activeElement).toBe(keep);
+    expect(dialog.contains(document.activeElement)).toBe(true);
+    panel.destroy();
+  });
+
+  it('focus moving outside the panel is pulled back to the dialog', () => {
+    const { panel, q } = setup();
+    const outside = document.createElement('button');
+    document.body.append(outside);
+    panel.open();
+    outside.focus();
+    expect(document.activeElement).toBe(q('[role="dialog"]'));
+    panel.destroy();
+  });
+
+  it('close() blurs a focused input so toddler keys cannot type into it', () => {
+    const { panel, q } = setup();
+    panel.open();
+    const name = q<HTMLInputElement>('input[data-setting="childName"]');
+    name.focus();
+    expect(document.activeElement).toBe(name);
+    panel.close();
+    expect(document.activeElement).not.toBe(name);
+    expect(q<HTMLElement>('.ks-panel').inert).toBe(true);
+    panel.destroy();
+  });
+
+  it('destroy() drops store, speaker and progress subscriptions', () => {
+    const { panel, progress } = setup();
+    expect(progress.listenerCount).toBe(1);
+    panel.open();
+    panel.open(); // idempotent: no extra subscriptions
+    expect(progress.listenerCount).toBe(1);
+    panel.destroy();
+    expect(progress.listenerCount).toBe(0);
+    expect(root.querySelector('.ks-panel')).toBeNull();
+    expect(() => progress.markSeen('A')).not.toThrow();
+  });
+
   it('formats play time for grown-ups', () => {
     expect(formatDuration(45_000)).toBe('45 s');
     expect(formatDuration(12 * 60_000)).toBe('12 min');
@@ -653,6 +1044,94 @@ describe('DomOverlays', () => {
     overlays.setCornerProgress(0);
     expect(ring.classList.contains('is-shown')).toBe(false);
     overlays.destroy();
+  });
+
+  it('the hold button is a grown-up control: data-allow-keys, and a pointer leave cancels', () => {
+    vi.useFakeTimers();
+    const overlays = new DomOverlays(root);
+    const onParentResume = vi.fn();
+    overlays.showAllDone(onParentResume);
+    const hold = root.querySelector<HTMLButtonElement>('.ks-hold') as HTMLButtonElement;
+    expect(hold.hasAttribute('data-allow-keys')).toBe(true);
+    hold.dispatchEvent(pointer('pointerdown'));
+    vi.advanceTimersByTime(ALL_DONE_HOLD_MS - 100);
+    hold.dispatchEvent(pointer('pointerleave'));
+    expect(hold.classList.contains('is-holding')).toBe(false);
+    vi.advanceTimersByTime(ALL_DONE_HOLD_MS);
+    expect(onParentResume).not.toHaveBeenCalled();
+    // Key auto-repeat does not restart or extend the timer.
+    hold.dispatchEvent(key('keydown', 'Enter'));
+    vi.advanceTimersByTime(ALL_DONE_HOLD_MS / 2);
+    hold.dispatchEvent(key('keydown', 'Enter', { repeat: true }));
+    vi.advanceTimersByTime(ALL_DONE_HOLD_MS / 2);
+    expect(onParentResume).toHaveBeenCalledTimes(1);
+    overlays.destroy();
+  });
+
+  it('holding after the All done screen was hidden does nothing', () => {
+    vi.useFakeTimers();
+    const overlays = new DomOverlays(root);
+    const onParentResume = vi.fn();
+    overlays.showAllDone(onParentResume);
+    overlays.hideAllDone();
+    const hold = root.querySelector<HTMLButtonElement>('.ks-hold') as HTMLButtonElement;
+    hold.dispatchEvent(pointer('pointerdown'));
+    expect(hold.classList.contains('is-holding')).toBe(false);
+    vi.advanceTimersByTime(ALL_DONE_HOLD_MS * 2);
+    expect(onParentResume).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(400);
+    expect(root.querySelector<HTMLElement>('.ks-alldone')?.hidden).toBe(true);
+    overlays.destroy();
+  });
+
+  it('resume ignores keys inside [data-allow-keys] and stops listening after hideResume', () => {
+    const overlays = new DomOverlays(root);
+    const onResume = vi.fn();
+    overlays.showResume(onResume);
+    const box = document.createElement('div');
+    box.setAttribute('data-allow-keys', '');
+    document.body.append(box);
+    box.dispatchEvent(key('keydown', 'a'));
+    window.dispatchEvent(key('keydown', 'a', { metaKey: true }));
+    expect(onResume).not.toHaveBeenCalled();
+    overlays.hideResume();
+    window.dispatchEvent(key('keydown', 'a'));
+    expect(onResume).not.toHaveBeenCalled();
+    // Showing again with a new callback uses the new one.
+    const next = vi.fn();
+    overlays.showResume(onResume);
+    overlays.showResume(next);
+    window.dispatchEvent(key('keydown', 'a'));
+    expect(onResume).not.toHaveBeenCalled();
+    expect(next).toHaveBeenCalledTimes(1);
+    overlays.destroy();
+  });
+
+  it('corner ring clamps out-of-range and non-finite progress', () => {
+    const overlays = new DomOverlays(root);
+    const ring = root.querySelector<HTMLElement>('.ks-corner') as HTMLElement;
+    const fill = root.querySelector<SVGCircleElement>('.ks-corner__fill') as SVGCircleElement;
+    overlays.setCornerProgress(5);
+    expect(ring.classList.contains('is-full')).toBe(true);
+    expect(Number(fill.style.strokeDashoffset)).toBe(0);
+    overlays.setCornerProgress(Number.NaN);
+    expect(ring.classList.contains('is-shown')).toBe(false);
+    overlays.setCornerProgress(-1);
+    expect(ring.classList.contains('is-shown')).toBe(false);
+    overlays.setCornerProgress(0.25);
+    expect(ring.classList.contains('is-full')).toBe(false);
+    expect(Number(fill.style.strokeDashoffset)).toBeCloseTo(2 * Math.PI * 26 * 0.75, 1);
+    overlays.destroy();
+  });
+
+  it('destroy() removes every element and the resume key listener', () => {
+    const overlays = new DomOverlays(root);
+    const onResume = vi.fn();
+    overlays.showResume(onResume);
+    overlays.destroy();
+    expect(root.children).toHaveLength(0);
+    window.dispatchEvent(key('keydown', 'a'));
+    expect(onResume).not.toHaveBeenCalled();
   });
 
   it('toast shows the newest message politely and auto-hides', () => {

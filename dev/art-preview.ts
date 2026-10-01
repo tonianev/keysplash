@@ -2,14 +2,16 @@
  * Dev-only art preview (served by `vite` at /dev/art-preview.html; not part of
  * the production build). Shows every backdrop as a live tile with its CPU cost,
  * and every shape in a world's palette with blinking faces, plus one big
- * shape at r = 300 to check detail.
+ * shape at r = 300 to check detail, plus the four direction arrows (v2 matte
+ * paint: flat fills with a tonal rim).
  */
 import { WORLDS, WORLD_ORDER } from '../src/worlds';
 import { createBackdrop, type Backdrop } from '../src/render/backgrounds';
-import { drawFace, drawShape } from '../src/render/shapes';
-import type { ShapeKind, World, WorldId } from '../src/types';
+import { drawArrow, drawFace, drawShape } from '../src/render/shapes';
+import type { DirectionName, ShapeKind, World, WorldId } from '../src/types';
 
-const SHAPES: ShapeKind[] = ['circle', 'square', 'triangle', 'star', 'heart', 'diamond', 'moon', 'flower', 'hexagon', 'cloud'];
+const SHAPES: ShapeKind[] = ['circle', 'square', 'triangle', 'star', 'heart', 'diamond', 'moon', 'oval', 'hexagon', 'rectangle'];
+const DIRECTIONS: DirectionName[] = ['up', 'down', 'left', 'right'];
 const BUDGET_MS = 1.5;
 
 function $(id: string): HTMLElement {
@@ -171,7 +173,7 @@ const gridWidth = SHAPES.length * CELL;
 
 function layoutShapes(): void {
   const world = WORLDS[worldSelect.value as WorldId];
-  gridHeight = world.palette.length * CELL + CELL; // + a strip of small sizes
+  gridHeight = world.palette.length * CELL + CELL * 2; // + a strip of small sizes + arrows
   gridDpr = sizeCanvas(gridCanvas, gridWidth, gridHeight);
   sizeCanvas(bigCanvas, BIG, BIG);
 }
@@ -189,7 +191,14 @@ function drawShapes(now: number): void {
   });
   // Size strip: r = 20 (the smallest the scene should use)
   SHAPES.forEach((shape, col) => {
-    paintShape(gridCtx, world, shape, col * CELL + CELL / 2, gridHeight - CELL / 2, 20, col, 100 + col, now);
+    paintShape(gridCtx, world, shape, col * CELL + CELL / 2, gridHeight - CELL * 1.5, 20, col, 100 + col, now);
+  });
+  // Arrow strip (direction cards)
+  DIRECTIONS.forEach((direction, col) => {
+    gridCtx.save();
+    gridCtx.translate(col * CELL + CELL / 2, gridHeight - CELL / 2);
+    drawArrow(gridCtx, direction, R, world.palette[col % world.palette.length], world.dark);
+    gridCtx.restore();
   });
 
   const bigDpr = bigCanvas.width / BIG;

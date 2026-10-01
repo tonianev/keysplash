@@ -33,28 +33,33 @@ function throwingStorage(): Storage {
 describe('DEFAULT_SETTINGS', () => {
   it('has the documented defaults', () => {
     expect(DEFAULT_SETTINGS).toEqual({
-      world: 'space',
+      world: 'paper',
+      mode: 'explore',
+      layout: 'focus',
       autoRotate: false,
       rotateMinutes: 5,
-      volume: 0.7,
+      volume: 0.6,
       muted: false,
       notes: true,
       speech: 'word',
       voiceURI: null,
-      letterCase: 'upper',
+      letterCase: 'both',
       pictures: true,
       size: 'big',
       intensity: 'normal',
       motion: 'system',
       trails: true,
-      faces: true,
-      spatialKeys: true,
+      faces: false,
       childName: '',
       sessionMinutes: 0,
       secretWord: 'parent',
       lockKeyboard: true,
       confirmExit: true,
     });
+  });
+
+  it('is frozen', () => {
+    expect(Object.isFrozen(DEFAULT_SETTINGS)).toBe(true);
   });
 
   it('is already sanitised', () => {
@@ -82,6 +87,8 @@ describe('sanitizeSettings', () => {
   it('replaces wrong types and invalid enum values with defaults', () => {
     const s = sanitizeSettings({
       world: 'mars',
+      mode: 'race',
+      layout: 3,
       volume: 'loud',
       notes: 'yes',
       muted: 1,
@@ -101,7 +108,7 @@ describe('sanitizeSettings', () => {
   });
 
   it('accepts every valid enum value', () => {
-    for (const world of ['space', 'ocean', 'garden', 'party', 'bubbles', 'dino', 'night'] as const) {
+    for (const world of ['paper', 'garden', 'ocean', 'space', 'jungle', 'snow', 'night'] as const) {
       expect(sanitizeSettings({ world }).world).toBe(world);
     }
     for (const speech of ['off', 'letter', 'word'] as const) expect(sanitizeSettings({ speech }).speech).toBe(speech);
@@ -109,14 +116,20 @@ describe('sanitizeSettings', () => {
       expect(sanitizeSettings({ letterCase }).letterCase).toBe(letterCase);
     }
     for (const size of ['normal', 'big', 'huge'] as const) expect(sanitizeSettings({ size }).size).toBe(size);
-    for (const intensity of ['calm', 'normal', 'wild'] as const) {
+    for (const intensity of ['calm', 'normal', 'lively'] as const) {
       expect(sanitizeSettings({ intensity }).intensity).toBe(intensity);
     }
     for (const motion of ['system', 'reduce', 'full'] as const) expect(sanitizeSettings({ motion }).motion).toBe(motion);
+    for (const mode of ['explore', 'find-letters', 'find-numbers', 'spell'] as const) {
+      expect(sanitizeSettings({ mode }).mode).toBe(mode);
+    }
+    for (const layout of ['focus', 'keyboard'] as const) expect(sanitizeSettings({ layout }).layout).toBe(layout);
   });
 
   it('does not treat inherited properties as valid enum values', () => {
-    expect(sanitizeSettings({ world: 'toString' }).world).toBe('space');
+    expect(sanitizeSettings({ world: 'toString' }).world).toBe('paper');
+    expect(sanitizeSettings({ mode: 'constructor' }).mode).toBe('explore');
+    expect(sanitizeSettings({ layout: 'hasOwnProperty' }).layout).toBe('focus');
     expect(sanitizeSettings({ speech: '__proto__' }).speech).toBe('word');
   });
 
@@ -133,8 +146,8 @@ describe('sanitizeSettings', () => {
   });
 
   it('rejects non-finite numbers but accepts numeric strings from form inputs', () => {
-    expect(sanitizeSettings({ volume: Number.NaN }).volume).toBe(0.7);
-    expect(sanitizeSettings({ volume: Number.POSITIVE_INFINITY }).volume).toBe(0.7);
+    expect(sanitizeSettings({ volume: Number.NaN }).volume).toBe(0.6);
+    expect(sanitizeSettings({ volume: Number.POSITIVE_INFINITY }).volume).toBe(0.6);
     expect(sanitizeSettings({ rotateMinutes: '' }).rotateMinutes).toBe(5);
     expect(sanitizeSettings({ rotateMinutes: 'ten' }).rotateMinutes).toBe(5);
     expect(sanitizeSettings({ volume: '0.5' }).volume).toBe(0.5);
@@ -211,10 +224,17 @@ describe('LocalSettingsStore', () => {
   it('persists and reloads (round trip)', () => {
     const storage = memoryStorage();
     const a = new LocalSettingsStore(storage);
-    a.update({ world: 'dino', volume: 0.4, childName: 'Mia' });
+    a.update({ world: 'jungle', mode: 'spell', layout: 'keyboard', volume: 0.4, childName: 'Mia' });
     expect(storage.data.has('keysplash:settings:v1')).toBe(true);
     const b = new LocalSettingsStore(storage);
-    expect(b.get()).toEqual({ ...DEFAULT_SETTINGS, world: 'dino', volume: 0.4, childName: 'Mia' });
+    expect(b.get()).toEqual({
+      ...DEFAULT_SETTINGS,
+      world: 'jungle',
+      mode: 'spell',
+      layout: 'keyboard',
+      volume: 0.4,
+      childName: 'Mia',
+    });
   });
 
   it('uses a custom key', () => {
@@ -239,8 +259,8 @@ describe('LocalSettingsStore', () => {
   it('falls back to memory when storage throws', () => {
     const store = new LocalSettingsStore(throwingStorage());
     expect(store.get()).toEqual(DEFAULT_SETTINGS);
-    expect(() => store.update({ world: 'party' })).not.toThrow();
-    expect(store.get().world).toBe('party');
+    expect(() => store.update({ world: 'ocean' })).not.toThrow();
+    expect(store.get().world).toBe('ocean');
   });
 
   it('works with no storage at all', () => {
@@ -281,7 +301,7 @@ describe('LocalSettingsStore', () => {
     expect(Object.isFrozen(before)).toBe(true);
     const after = store.update({ world: 'ocean' });
     expect(after).not.toBe(before);
-    expect(before.world).toBe('space');
+    expect(before.world).toBe('paper');
     expect(store.get()).toBe(after);
   });
 
@@ -290,12 +310,12 @@ describe('LocalSettingsStore', () => {
     const listener = vi.fn();
     store.subscribe(listener);
     const prev = store.get();
-    const next = store.update({ world: 'bubbles' });
+    const next = store.update({ world: 'snow' });
     expect(listener).toHaveBeenCalledTimes(1);
     expect(listener).toHaveBeenCalledWith(next, prev);
 
     // No-ops: same value, invalid value that sanitises to the current one, empty patch.
-    expect(store.update({ world: 'bubbles' })).toBe(next);
+    expect(store.update({ world: 'snow' })).toBe(next);
     store.update({ volume: Number.NaN });
     store.update({});
     expect(listener).toHaveBeenCalledTimes(1);
@@ -305,7 +325,7 @@ describe('LocalSettingsStore', () => {
     const storage = memoryStorage();
     const store = new LocalSettingsStore(storage);
     const spy = vi.spyOn(storage, 'setItem');
-    store.update({ volume: 0.7 });
+    store.update({ volume: 0.6 });
     expect(spy).not.toHaveBeenCalled();
   });
 
@@ -348,5 +368,98 @@ describe('LocalSettingsStore', () => {
     const store = new LocalSettingsStore(memoryStorage());
     const before = store.get();
     expect(store.update(null as unknown as Partial<Settings>)).toBe(before);
+  });
+});
+
+describe('v1 → v2 migration', () => {
+  it('maps renamed worlds: party→paper, bubbles→snow, dino→jungle', () => {
+    expect(sanitizeSettings({ world: 'party' }).world).toBe('paper');
+    expect(sanitizeSettings({ world: 'bubbles' }).world).toBe('snow');
+    expect(sanitizeSettings({ world: 'dino' }).world).toBe('jungle');
+  });
+
+  it('maps intensity wild→lively', () => {
+    expect(sanitizeSettings({ intensity: 'wild' }).intensity).toBe('lively');
+  });
+
+  it('migrates a stored v1 settings blob and drops spatialKeys', () => {
+    const v1 = {
+      world: 'dino',
+      autoRotate: true,
+      rotateMinutes: 10,
+      volume: 0.7,
+      muted: false,
+      notes: true,
+      speech: 'letter',
+      voiceURI: null,
+      letterCase: 'upper',
+      pictures: true,
+      size: 'huge',
+      intensity: 'wild',
+      motion: 'reduce',
+      trails: false,
+      faces: true,
+      spatialKeys: true,
+      childName: 'Mia',
+      sessionMinutes: 20,
+      secretWord: 'mommy',
+      lockKeyboard: false,
+      confirmExit: true,
+    };
+    const storage = memoryStorage({ 'keysplash:settings:v1': JSON.stringify(v1) });
+    const s = new LocalSettingsStore(storage).get();
+    expect(s).toEqual({
+      ...DEFAULT_SETTINGS,
+      world: 'jungle',
+      autoRotate: true,
+      rotateMinutes: 10,
+      volume: 0.7,
+      speech: 'letter',
+      letterCase: 'upper',
+      size: 'huge',
+      intensity: 'lively',
+      motion: 'reduce',
+      trails: false,
+      faces: true,
+      childName: 'Mia',
+      sessionMinutes: 20,
+      secretWord: 'mommy',
+      lockKeyboard: false,
+    });
+    expect('spatialKeys' in s).toBe(false);
+    // New v2 fields come from the defaults.
+    expect(s.mode).toBe('explore');
+    expect(s.layout).toBe('focus');
+  });
+
+  it('migrates legacy values in an update patch too', () => {
+    const store = new LocalSettingsStore(memoryStorage());
+    expect(store.update({ world: 'bubbles' } as unknown as Partial<Settings>).world).toBe('snow');
+    expect(store.update({ intensity: 'wild' } as unknown as Partial<Settings>).intensity).toBe('lively');
+  });
+
+  it('invalid mode/layout in a patch keep the current values', () => {
+    const store = new LocalSettingsStore(memoryStorage());
+    store.update({ mode: 'spell', layout: 'keyboard' });
+    const next = store.update({ mode: 'chess', layout: 'grid' } as unknown as Partial<Settings>);
+    expect(next.mode).toBe('spell');
+    expect(next.layout).toBe('keyboard');
+  });
+
+  it('survives quota errors on write and keeps the in-memory value', () => {
+    const storage = memoryStorage();
+    storage.setItem = () => {
+      throw new DOMException('full', 'QuotaExceededError');
+    };
+    const store = new LocalSettingsStore(storage);
+    expect(() => store.update({ mode: 'find-letters' })).not.toThrow();
+    expect(store.get().mode).toBe('find-letters');
+  });
+
+  it('treats a stored JSON array or primitive as empty', () => {
+    for (const text of ['[1,2]', '42', '"paper"', 'null', 'true']) {
+      const storage = memoryStorage({ 'keysplash:settings:v1': text });
+      expect(new LocalSettingsStore(storage).get()).toEqual(DEFAULT_SETTINGS);
+    }
   });
 });

@@ -15,8 +15,8 @@ import { WebSpeaker, isNoveltyVoice, pickAutoVoice, rankVoices } from '../src/au
 import type { VoiceLike } from '../src/audio/speech';
 import type { SoundEffect, Timbre } from '../src/types';
 
-const TIMBRES: Timbre[] = ['bell', 'marimba', 'pluck', 'bubble', 'kalimba', 'soft'];
-const EFFECTS: SoundEffect[] = ['pop', 'bubble', 'boing', 'whoosh', 'sparkle', 'chime', 'tada', 'swoosh', 'thud', 'twinkle'];
+const TIMBRES: Timbre[] = ['felt', 'marimba', 'kalimba', 'celesta', 'harp', 'soft'];
+const EFFECTS: SoundEffect[] = ['tap', 'pop', 'swipe', 'chime', 'success', 'retry', 'count', 'complete'];
 
 // ---------------------------------------------------------------------------
 // Pure helpers
@@ -249,14 +249,15 @@ class FakeAudioContext {
   liveSources(): number {
     return this.sources.filter((s) => !s.ended).length;
   }
-  /** Walks back from the destination: ceiling ← compressor ← fade ← master. */
+  /** Walks back from the destination: ceiling ← compressor ← warmth lowpass ← fade ← master. */
   chain() {
     const feeding = (target: unknown) => this.nodes.find((n) => n.outputs.has(target));
     const ceiling = feeding(this.destination) as FakeGain;
     const compressor = feeding(ceiling) as FakeCompressor;
-    const fade = feeding(compressor) as FakeGain;
+    const warmth = feeding(compressor) as FakeFilter;
+    const fade = feeding(warmth) as FakeGain;
     const master = feeding(fade) as FakeGain;
-    return { ceiling, compressor, fade, master };
+    return { ceiling, compressor, warmth, fade, master };
   }
 }
 
@@ -331,6 +332,10 @@ describe('WebAudioEngine with a fake AudioContext', () => {
     expect(compressor.ratio.value).toBe(10);
     expect(compressor.attack.value).toBeCloseTo(0.003);
     expect(compressor.release.value).toBeCloseTo(0.25);
+    const { warmth } = ctx.chain();
+    expect(warmth).toBeInstanceOf(FakeFilter);
+    expect(warmth.type).toBe('lowpass');
+    expect(warmth.frequency.value).toBe(6000); // gentle master lowpass (DESIGN.md §5)
     expect(fade.gain.value).toBe(1);
     expect(master.gain.value).toBeCloseTo(0.64); // default volume 0.8, squared
 
@@ -381,7 +386,7 @@ describe('WebAudioEngine with a fake AudioContext', () => {
       }
       engine.note(60, { duration: 3 });
       engine.chord([60, 64, 67, 72], { spread: 0.08 });
-      engine.effect('tada');
+      engine.effect('complete');
       ctx.advance(5);
     }
     for (const fx of EFFECTS) {
@@ -402,14 +407,14 @@ describe('WebAudioEngine with a fake AudioContext', () => {
       engine.effect('chime');
       const started = ctx.sources.slice(before).filter((s): s is FakeOscillator => s instanceof FakeOscillator);
       ctx.advance(3);
-      // The fundamental of each bell voice (partial ratio 1).
-      return started.filter((_, i) => i % 5 === 0).map((o) => o.frequency.sets[0]);
+      // Chime uses the celesta: 3 partials per voice (1, 4, 2); take the fundamental.
+      return started.filter((_, i) => i % 3 === 0).map((o) => o.frequency.sets[0]);
     };
     const inC = chimeFrequencies();
-    expect(inC.map((f) => Math.round(f))).toEqual([76, 79, 84].map((m) => Math.round(midiToFrequency(m))));
+    expect(inC.map((f) => Math.round(f))).toEqual([76, 81].map((m) => Math.round(midiToFrequency(m))));
     engine.setRoot(65); // F: +5 semitones
     const inF = chimeFrequencies();
-    expect(inF.map((f) => Math.round(f))).toEqual([81, 84, 89].map((m) => Math.round(midiToFrequency(m))));
+    expect(inF.map((f) => Math.round(f))).toEqual([81, 86].map((m) => Math.round(midiToFrequency(m))));
     engine.setRoot(Number.NaN); // ignored
     expect(chimeFrequencies().map((f) => Math.round(f))).toEqual(inF.map((f) => Math.round(f)));
     expect(audioErrors).toEqual([]);
@@ -437,7 +442,7 @@ describe('WebAudioEngine with a fake AudioContext', () => {
 
   it('caps concurrent voices at 18 and fast-fades the oldest', async () => {
     const { engine, ctx } = await unlocked();
-    engine.setTimbre('bell');
+    engine.setTimbre('felt');
     // A toddler mashing 10 keys at 20 Hz for 3 seconds.
     for (let tick = 0; tick < 60; tick++) {
       for (let k = 0; k < 10; k++) engine.note(60 + k);
@@ -446,7 +451,7 @@ describe('WebAudioEngine with a fake AudioContext', () => {
     }
     expect(audioErrors).toEqual([]);
     // Stolen voices' sources were stopped early, so few sources are left running.
-    const perVoice = 5; // bell partials
+    const perVoice = 3; // felt: sine + triangle + hammer noise
     expect(ctx.liveSources()).toBeLessThanOrEqual(MAX_VOICES * perVoice);
     ctx.advance(10);
     expect(ctx.liveSources()).toBe(0);
@@ -457,7 +462,7 @@ describe('WebAudioEngine with a fake AudioContext', () => {
     const { engine, ctx } = await unlocked();
     const before = ctx.nodes.length;
     engine.note(60, { pan: 0.5 });
-    engine.effect('whoosh');
+    engine.effect('swipe');
     const voiceNodes = ctx.nodes.slice(before);
     expect(voiceNodes.length).toBeGreaterThan(0);
     ctx.advance(5);
@@ -685,8 +690,8 @@ describe('WebSpeaker', () => {
     expect(synth.spoken).toHaveLength(1);
     const u = synth.spoken[0];
     expect(u.text).toBe('apple');
-    expect(u.rate).toBeCloseTo(0.92);
-    expect(u.pitch).toBeCloseTo(1.15);
+    expect(u.rate).toBeCloseTo(0.88);
+    expect(u.pitch).toBeCloseTo(1.08);
     expect(u.lang).toBe('en-US');
   });
 
@@ -807,5 +812,236 @@ describe('WebSpeaker', () => {
     s.onVoicesChanged(changed);
     bare.onvoiceschanged?.();
     expect(changed).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// v2 effects and timbres
+// ---------------------------------------------------------------------------
+
+describe('WebAudioEngine v2 effects', () => {
+  beforeEach(() => {
+    audioErrors = [];
+    FakeAudioContext.instances = [];
+    vi.stubGlobal('AudioContext', FakeAudioContext);
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('never throws before unlock for every method, timbre and effect', () => {
+    const engine = new WebAudioEngine();
+    expect(() => {
+      for (const timbre of TIMBRES) {
+        engine.setTimbre(timbre);
+        engine.note(60);
+        engine.chord([60, 64, 67]);
+      }
+      for (const fx of EFFECTS) engine.effect(fx, { step: 3, pan: -1 });
+      engine.setRoot(62);
+      engine.setVolume(0.3);
+      engine.setMuted(true);
+      engine.fadeTo(0.5, 1);
+    }).not.toThrow();
+    expect(FakeAudioContext.instances).toHaveLength(0);
+    expect(engine.ready).toBe(false);
+    expect(engine.activeVoices).toBe(0);
+  });
+
+  async function unlocked(): Promise<{ engine: WebAudioEngine; ctx: FakeAudioContext }> {
+    const engine = new WebAudioEngine();
+    await engine.unlock();
+    return { engine, ctx: FakeAudioContext.instances[0] };
+  }
+
+  function fundamentals(ctx: FakeAudioContext, before: number): number[] {
+    return ctx.sources
+      .slice(before)
+      .filter((s): s is FakeOscillator => s instanceof FakeOscillator)
+      .map((o) => Math.round(o.frequency.sets[0]));
+  }
+
+  it("'count' climbs the pentatonic scale with step and clamps bad steps", async () => {
+    const { engine, ctx } = await unlocked();
+    const first = (step: number | undefined): number => {
+      const before = ctx.sources.length;
+      engine.effect('count', step === undefined ? {} : { step });
+      ctx.advance(3);
+      return fundamentals(ctx, before)[0];
+    };
+    const f = [0, 1, 2, 3, 4, 5].map((s) => first(s));
+    for (let i = 1; i < f.length; i++) expect(f[i]).toBeGreaterThan(f[i - 1]);
+    expect(f[0]).toBe(Math.round(midiToFrequency(72)));
+    expect(f[5]).toBe(Math.round(midiToFrequency(84)));
+    expect(first(undefined)).toBe(f[0]);
+    expect(first(Number.NaN)).toBe(f[0]);
+    expect(first(-4)).toBe(f[0]);
+    expect(first(999)).toBe(Math.round(midiToFrequency(72 + pentatonicOffset(12))));
+    expect(audioErrors).toEqual([]);
+  });
+
+  it("'success' rises, 'complete' is a fuller phrase, 'retry' is soft and small", async () => {
+    const { engine, ctx } = await unlocked();
+    const voicesOf = (fx: SoundEffect): number => {
+      const v0 = engine.activeVoices;
+      engine.effect(fx);
+      const n = engine.activeVoices - v0;
+      ctx.advance(5);
+      return n;
+    };
+    expect(voicesOf('success')).toBe(3);
+    expect(voicesOf('complete')).toBe(5);
+    expect(voicesOf('retry')).toBe(2);
+    expect(voicesOf('chime')).toBe(2);
+    for (const fx of ['tap', 'pop', 'swipe'] as SoundEffect[]) expect(voicesOf(fx)).toBe(1);
+
+    // retry uses the warm 'soft' timbre (triangles), never a square/saw buzzer.
+    const before = ctx.sources.length;
+    engine.effect('retry');
+    const types = ctx.sources.slice(before).filter((s): s is FakeOscillator => s instanceof FakeOscillator).map((o) => o.type);
+    expect(types.length).toBeGreaterThan(0);
+    expect(types.every((t) => t === 'triangle')).toBe(true);
+    ctx.advance(5);
+
+    // No effect ever uses a harsh waveform.
+    const all = ctx.sources.filter((s): s is FakeOscillator => s instanceof FakeOscillator).map((o) => o.type);
+    expect(all.some((t) => t === 'square' || t === 'sawtooth')).toBe(false);
+    expect(audioErrors).toEqual([]);
+  });
+
+  it('every timbre plays one finite, in-range voice per note', async () => {
+    const { engine, ctx } = await unlocked();
+    for (const timbre of TIMBRES) {
+      engine.setTimbre(timbre);
+      engine.note(69, { velocity: 0.55 });
+      expect(engine.activeVoices).toBe(1);
+      ctx.advance(6);
+      expect(engine.activeVoices).toBe(0);
+    }
+    expect(ctx.liveSources()).toBe(0);
+    expect(audioErrors).toEqual([]);
+  });
+});
+
+describe('WebSpeaker.sequence', () => {
+  let synth: FakeSynth;
+  let speaker: WebSpeaker;
+  const texts = (): string[] => synth.spoken.map((u) => u.text);
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.stubGlobal('SpeechSynthesisUtterance', FakeUtterance);
+    synth = new FakeSynth();
+    const timers = {
+      set: (fn: () => void, ms: number) => setTimeout(fn, ms),
+      clear: (h: unknown) => clearTimeout(h as ReturnType<typeof setTimeout>),
+    };
+    speaker = new WebSpeaker(synth as unknown as SpeechSynthesis, () => Date.now(), timers);
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  it('speaks part i at i × step, then the closing phrase after the last part', () => {
+    speaker.sequence(['one', 'two', 'three'], 700, 'three stars!');
+    expect(speaker.sequencing).toBe(true);
+    vi.advanceTimersByTime(0);
+    expect(texts()).toEqual(['one']);
+    vi.advanceTimersByTime(699);
+    expect(texts()).toEqual(['one']);
+    vi.advanceTimersByTime(1);
+    expect(texts()).toEqual(['one', 'two']);
+    vi.advanceTimersByTime(700);
+    expect(texts()).toEqual(['one', 'two', 'three']);
+    // 'then' comes after the last part's slot (3 × 700 + gap), never before.
+    vi.advanceTimersByTime(699);
+    expect(texts()).toEqual(['one', 'two', 'three']);
+    vi.advanceTimersByTime(1000);
+    expect(texts()).toEqual(['one', 'two', 'three', 'three stars!']);
+    expect(speaker.sequencing).toBe(true); // still saying the closing phrase
+    vi.advanceTimersByTime(5000);
+    expect(speaker.sequencing).toBe(false);
+  });
+
+  it('skips low-priority say while sequencing but lets it through afterwards', () => {
+    speaker.sequence(['red', 'orange'], 600);
+    vi.advanceTimersByTime(100);
+    speaker.say('cow');
+    expect(texts()).toEqual(['red']);
+    vi.advanceTimersByTime(10_000);
+    expect(speaker.sequencing).toBe(false);
+    synth.finish();
+    speaker.say('cow');
+    expect(texts()).toEqual(['red', 'orange', 'cow']);
+  });
+
+  it('a high-priority say aborts the sequence', () => {
+    speaker.sequence(['one', 'two', 'three'], 700, 'three!');
+    vi.advanceTimersByTime(10);
+    speaker.say('Yes!', 'high');
+    expect(speaker.sequencing).toBe(false);
+    vi.advanceTimersByTime(10_000);
+    expect(texts()).toEqual(['one', 'Yes!']);
+  });
+
+  it('cancel() aborts the sequence and clears every pending timer', () => {
+    speaker.sequence(['one', 'two', 'three'], 700, 'done');
+    vi.advanceTimersByTime(10);
+    speaker.cancel();
+    expect(speaker.sequencing).toBe(false);
+    expect(vi.getTimerCount()).toBe(0);
+    vi.advanceTimersByTime(10_000);
+    expect(texts()).toEqual(['one']);
+  });
+
+  it('a new sequence replaces the previous one', () => {
+    speaker.sequence(['one', 'two', 'three'], 700);
+    vi.advanceTimersByTime(10);
+    speaker.sequence(['a', 'b'], 100);
+    vi.advanceTimersByTime(10_000);
+    expect(texts()).toEqual(['one', 'a', 'b']);
+    expect(speaker.sequencing).toBe(false);
+  });
+
+  it("'then' alone (zero — none!) is spoken immediately", () => {
+    speaker.sequence([], 700, 'zero — none!');
+    expect(speaker.sequencing).toBe(true);
+    vi.advanceTimersByTime(0);
+    expect(texts()).toEqual(['zero — none!']);
+    vi.advanceTimersByTime(10_000);
+    expect(speaker.sequencing).toBe(false);
+  });
+
+  it('is a no-op when disabled, unsupported, or given nothing to say', () => {
+    speaker.setEnabled(false);
+    speaker.sequence(['one'], 700, 'x');
+    expect(speaker.sequencing).toBe(false);
+    speaker.setEnabled(true);
+    speaker.sequence(['  ', ''], 700, '  ');
+    speaker.sequence(null as unknown as string[], 700);
+    expect(speaker.sequencing).toBe(false);
+    vi.advanceTimersByTime(10_000);
+    expect(synth.spoken).toHaveLength(0);
+    expect(vi.getTimerCount()).toBe(0);
+
+    const silent = new WebSpeaker(null);
+    expect(() => silent.sequence(['one'], 700, 'x')).not.toThrow();
+    expect(silent.sequencing).toBe(false);
+  });
+
+  it('bounds the number of scheduled parts and tolerates a bad step', () => {
+    speaker.sequence(Array.from({ length: 100 }, (_, i) => `n${i}`), Number.NaN);
+    expect(vi.getTimerCount()).toBeLessThanOrEqual(14);
+    vi.advanceTimersByTime(60_000);
+    expect(synth.spoken.length).toBeLessThanOrEqual(12);
+    expect(speaker.sequencing).toBe(false);
+  });
+
+  it('disabling mid-sequence stops it', () => {
+    speaker.sequence(['one', 'two'], 700);
+    vi.advanceTimersByTime(10);
+    speaker.setEnabled(false);
+    vi.advanceTimersByTime(10_000);
+    expect(texts()).toEqual(['one']);
+    expect(speaker.sequencing).toBe(false);
   });
 });

@@ -663,10 +663,7 @@ export class Game {
     this.hoverColor = null;
     // Keep the prompt's colour name but take the new world's tones.
     const challenge = this.games.current();
-    if (challenge && this.state !== 'idle' && this.promptBar.isVisible) {
-      const color = world.palette.find((c) => c.name === challenge.color.name) ?? challenge.color;
-      this.promptBar.show({ ...challenge, color } as Challenge);
-    }
+    if (challenge && this.state !== 'idle' && this.promptBar.isVisible) this.promptBar.show(this.retone(challenge));
   }
 
   // -------------------------------------------------------------------------
@@ -1026,9 +1023,15 @@ export class Game {
   /** Show a challenge in the prompt bar (and optionally say its prompt). */
   private showChallenge(challenge: Challenge, speak: boolean): void {
     this.hintSpoken = false;
-    this.promptBar.show(challenge);
+    this.promptBar.show(this.retone(challenge));
     this.idlePromptAt = this.now() + IDLE_PROMPT_MS;
     if (speak) this.speaker.say(challenge.prompt, 'high');
+  }
+
+  /** A challenge made in another world keeps its colour name but takes this world's tones. */
+  private retone(challenge: Challenge): Challenge {
+    const color = this.world.palette.find((c) => c.name === challenge.color.name) ?? challenge.color;
+    return color === challenge.color ? challenge : ({ ...challenge, color } as Challenge);
   }
 
   private onCorrect(content: KeyContent, outcome: Extract<ModeOutcome, { result: 'correct' }>, press: KeyPress): void {

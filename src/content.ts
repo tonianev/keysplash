@@ -92,9 +92,9 @@ const PICTURES: ReadonlyArray<readonly [string, string]> = [
 
 /** Codes with a deliberate picture, so the most-hit keys feel intentional. */
 const PICTURE_FOR_CODE: Record<string, number> = {
-  ShiftLeft: 0, ShiftRight: 1, ControlLeft: 2, ControlRight: 3, AltLeft: 4, AltRight: 5,
-  MetaLeft: 6, MetaRight: 7, Tab: 8, CapsLock: 9, Escape: 10, ContextMenu: 11,
-  F1: 12, F2: 13, F3: 14, F4: 15, F5: 16, F6: 17, F7: 18, F8: 19, F9: 20, F10: 21, F11: 22, F12: 23,
+  F1: 0, F2: 1, F3: 2, F4: 3, F5: 4, F6: 5, F7: 6, F8: 7, F9: 8, F10: 9, F11: 10, F12: 11,
+  ShiftLeft: 12, ShiftRight: 13, ControlLeft: 14, ControlRight: 15, AltLeft: 16, AltRight: 17,
+  MetaLeft: 18, MetaRight: 19, Tab: 20, CapsLock: 21, Escape: 22, ContextMenu: 23,
   Insert: 24, Home: 25, End: 26, PageUp: 27, PageDown: 28, Fn: 29,
 };
 
