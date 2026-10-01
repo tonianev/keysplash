@@ -1,9 +1,10 @@
 /**
- * Shared contracts for KeySplash.
+ * Shared contracts for KeySplash (v2 — "learn through play", matte design).
  *
  * Every module codes against these types. Modules export concrete classes that
  * `implements` the interfaces below, so the orchestrator (src/game.ts) only
- * depends on this file. Change this file only with care: every module reads it.
+ * depends on this file. See DESIGN.md for the visual language and the
+ * education model these contracts serve.
  *
  * Units: screen positions are CSS pixels relative to the top-left of the
  * viewport. Times are milliseconds from `performance.now()` unless a name says
@@ -11,58 +12,84 @@
  */
 
 // ---------------------------------------------------------------------------
+// Shared timing (scene animation and speech must stay in step)
+// ---------------------------------------------------------------------------
+
+export const TIMING = {
+  /** A digit card reveals one counted picture every step, while the number is spoken. */
+  countStepMs: 700,
+  /** The rainbow paints one band every step while its colour name is spoken. */
+  rainbowBandMs: 600,
+} as const;
+
+// ---------------------------------------------------------------------------
 // Worlds (themes)
 // ---------------------------------------------------------------------------
 
-export type WorldId = 'space' | 'ocean' | 'garden' | 'party' | 'bubbles' | 'dino' | 'night';
+export type WorldId = 'paper' | 'garden' | 'ocean' | 'space' | 'jungle' | 'snow' | 'night';
 
-/** Instrument voice the audio engine uses for key notes in a world. */
-export type Timbre = 'bell' | 'marimba' | 'pluck' | 'bubble' | 'kalimba' | 'soft';
+/** Soft, warm instrument the audio engine uses for key notes in a world. */
+export type Timbre = 'felt' | 'marimba' | 'kalimba' | 'celesta' | 'harp' | 'soft';
 
-/** Animated backdrop the renderer draws behind everything. */
-export type BackgroundKind = 'starfield' | 'underwater' | 'meadow' | 'party' | 'bubbles' | 'jungle' | 'night';
+/** Matte, flat illustrated backdrop. One per world. */
+export type BackgroundKind = 'paper' | 'meadow' | 'ocean' | 'space' | 'jungle' | 'snow' | 'night';
 
-/** Look of the small particles in bursts. */
-export type ParticleStyle = 'spark' | 'bubble' | 'petal' | 'confetti' | 'star' | 'leaf' | 'firefly';
+/** Small matte pieces used for gentle celebrations (never glowing). */
+export type ParticleStyle = 'confetti' | 'dots' | 'petals' | 'bubbles' | 'leaves' | 'snow' | 'stars';
 
-/** Colour names a toddler can learn. Used for speech ("Blue star!"). */
-export type ColorName = 'red' | 'orange' | 'yellow' | 'green' | 'blue' | 'purple' | 'pink' | 'white';
+/** Basic colour words a toddler can learn. Spoken aloud ("blue circle"). */
+export type ColorName = 'red' | 'orange' | 'yellow' | 'green' | 'blue' | 'purple' | 'pink' | 'brown';
 
+/**
+ * A learnable colour with matte tonal variants (Material-3 style tones).
+ * Light worlds: `container` is a pale tint, `ink` a deep tone.
+ * Dark worlds: `container` is a deep tone, `ink` a light tone.
+ */
 export interface NamedColor {
   name: ColorName;
-  /** CSS colour, e.g. '#ff5a5f'. Must read clearly against the world's sky. */
+  /** The colour itself — a matte, mid-saturation swatch. Shapes, confetti, rainbow bands, paint. */
   hex: string;
+  /** Card surface tinted with this colour. */
+  container: string;
+  /** Text/glyph colour on `container` (contrast ≥ 4.5:1 with it). */
+  ink: string;
 }
 
 export interface WordEntry {
-  /** Lower-case word, e.g. 'apple'. */
+  /** Lower-case word, e.g. 'apple'. Must contain the featured letter. */
   word: string;
-  /** A single emoji that pictures the word, e.g. '🍎'. Widely supported (Unicode ≤ 13). */
+  /** A single emoji that pictures the word, e.g. '🍎'. Unicode ≤ 13, no ZWJ sequences. */
   emoji: string;
+  /** Index of the featured letter inside `word` (default 0 — the first letter). e.g. 'fox' for X → 2. */
+  at?: number;
 }
 
 export interface World {
   id: WorldId;
-  /** Parent-facing name, e.g. 'Outer Space'. */
+  /** Parent-facing name, e.g. 'Paper', 'Under the Sea'. */
   label: string;
-  /** Icon for the world picker. */
+  /** Emoji icon for pickers. */
   icon: string;
   background: BackgroundKind;
-  /** Backdrop gradient, top colour then bottom colour. */
+  /** Backdrop base colours, top then bottom (matte; the backdrop may add flat layers). */
   sky: [string, string];
-  /** True when the sky is dark (renderer picks outline/shadow colours from this). */
+  /** True when the backdrop is dark (cards/ink use dark-mode tones). */
   dark: boolean;
-  /** 5–7 bright colours used for glyphs, shapes and particles. */
+  /** Neutral card surface for cards that teach no colour (pictures, directions) and UI chrome. */
+  surface: string;
+  /** Neutral text colour on `surface`. */
+  onSurface: string;
+  /** 6–8 learnable colours. Must include red, orange, yellow, green, blue, purple (the rainbow). */
   palette: NamedColor[];
   particle: ParticleStyle;
-  /** Particle/glyph gravity in px/s². Positive falls, negative floats up. */
+  /** Gentle drift in px/s² for particles/idle friends. Positive falls, negative floats up. */
   gravity: number;
-  /** Motion multiplier (0.5 sleepy … 1.5 lively). */
+  /** Motion multiplier (0.6 sleepy … 1.2 lively). */
   energy: number;
   timbre: Timbre;
   /** MIDI note of the world's pentatonic root (e.g. 60 = middle C). */
   rootMidi: number;
-  /** Emoji that live in this world; used for taps, filler keys and idle play. */
+  /** Emoji that live in this world; used for taps and idle friends. */
   friends: string[];
   /** Optional per-letter word list overrides (keys are upper-case 'A'…'Z'). */
   words?: Partial<Record<string, WordEntry[]>>;
@@ -75,36 +102,40 @@ export interface World {
 export type SpeechMode = 'off' | 'letter' | 'word';
 export type LetterCase = 'upper' | 'lower' | 'both';
 export type SizeLevel = 'normal' | 'big' | 'huge';
-export type Intensity = 'calm' | 'normal' | 'wild';
+export type Intensity = 'calm' | 'normal' | 'lively';
 export type MotionPref = 'system' | 'reduce' | 'full';
+/** explore = free play; the others are gentle learning games (see DESIGN.md). */
+export type PlayMode = 'explore' | 'find-letters' | 'find-numbers' | 'spell';
+/** focus = one flashcard centre-stage, recent ones on a shelf; keyboard = cards appear where the key sits. */
+export type Layout = 'focus' | 'keyboard';
 
 export interface Settings {
   world: WorldId;
+  mode: PlayMode;
+  layout: Layout;
   /** Switch to the next world every `rotateMinutes` minutes. */
   autoRotate: boolean;
   rotateMinutes: number; // 1..30
   /** Master volume 0..1 (the engine also hard-limits peaks). */
   volume: number;
   muted: boolean;
-  /** Musical notes on key presses (otherwise only soft sound effects). */
+  /** Soft musical note under each key press (otherwise a quiet tap sound). */
   notes: boolean;
-  /** What is spoken aloud on letter/number/shape keys. */
+  /** 'letter' → "B"; 'word' → "B… B is for ball". */
   speech: SpeechMode;
   /** `SpeechSynthesisVoice.voiceURI`, or null for automatic choice. */
   voiceURI: string | null;
   letterCase: LetterCase;
-  /** Show the picture (emoji) that goes with a letter, e.g. A → 🍎. */
+  /** Show the picture (emoji) that goes with a letter, e.g. B → ⚽. */
   pictures: boolean;
   size: SizeLevel;
   intensity: Intensity;
   motion: MotionPref;
-  /** Sparkle trails that follow the mouse / finger. */
+  /** Finger/mouse painting with soft matte strokes. */
   trails: boolean;
-  /** Shapes get cute blinking faces. */
+  /** Tap shapes get simple friendly faces. */
   faces: boolean;
-  /** Place each key's letter where that key sits on the keyboard (left keys → left of screen). */
-  spatialKeys: boolean;
-  /** Optional child's name; shown on the start screen and spoken now and then. '' = none. */
+  /** Optional child's name; greeted on start, used in praise ("Great job, Mia!"). '' = none. */
   childName: string;
   /** Wind down and show "All done!" after this many minutes. 0 = never. */
   sessionMinutes: number; // 0..120
@@ -118,7 +149,7 @@ export interface Settings {
 
 export interface SettingsStore {
   get(): Settings;
-  /** Merge, sanitise, persist, notify. Returns the new settings. */
+  /** Merge, sanitise, persist, notify. Invalid fields keep their current value. Returns the new settings. */
   update(patch: Partial<Settings>): Settings;
   reset(): Settings;
   /** Called after every change. Returns an unsubscribe function. */
@@ -126,51 +157,93 @@ export interface SettingsStore {
 }
 
 // ---------------------------------------------------------------------------
-// Content: what a key press *means*
+// Learning progress — persisted to localStorage, shown to parents
+// ---------------------------------------------------------------------------
+
+export interface LearningProgress {
+  /** How often each symbol was shown in play. Keys: 'A'…'Z', '0'…'9'. */
+  seen: Record<string, number>;
+  /** How often each symbol was found in a Find game. */
+  found: Record<string, number>;
+  /** How often each word was spelled in Spell. Keys: lower-case words. */
+  spelled: Record<string, number>;
+  /** Epoch ms of the first recorded activity, or null. */
+  since: number | null;
+}
+
+export interface ProgressStore {
+  get(): LearningProgress;
+  markSeen(symbol: string): void;
+  markFound(symbol: string): void;
+  markSpelled(word: string): void;
+  reset(): void;
+  /** Called after changes (may be batched). Returns an unsubscribe function. */
+  subscribe(listener: (progress: LearningProgress) => void): () => void;
+}
+
+// ---------------------------------------------------------------------------
+// Content: what a key press *teaches*
 // ---------------------------------------------------------------------------
 
 export type ShapeKind =
   | 'circle' | 'square' | 'triangle' | 'star' | 'heart'
-  | 'diamond' | 'moon' | 'flower' | 'hexagon' | 'cloud';
+  | 'diamond' | 'moon' | 'oval' | 'hexagon' | 'rectangle';
+
+export type DirectionName = 'up' | 'down' | 'left' | 'right';
 
 export type SpecialEffect =
-  | 'rainbow'     // Space bar: a rainbow arc sweeps across with sparkles
-  | 'fireworks'   // a few fireworks pop around the screen
-  | 'sweep'       // Enter: a gentle wave washes everything off the screen
-  | 'pop-all'     // Backspace/Delete: every object pops like a bubble
-  | 'comet-up' | 'comet-down' | 'comet-left' | 'comet-right'; // arrow keys
+  | 'rainbow'    // Space: bands paint in one by one while each colour is named
+  | 'clear'      // Enter/Backspace/Delete: cards glide away, "All clean!"
+  | 'celebrate'; // correct answers and palm smashes: soft matte confetti + the current card hops
 
 export type KeyContent =
   | {
       kind: 'letter';
       /** Upper-case letter 'A'…'Z'. */
       letter: string;
-      /** What to draw, already cased per settings, e.g. 'A', 'a' or 'Aa'. */
+      /** What to draw, already cased per settings: 'B', 'b' or 'Bb'. */
       display: string;
-      word: WordEntry | null;
+      word: WordEntry;
       color: NamedColor;
-      /** Text to speak, or null for silence. */
+      /** Text to speak, or null for silence. 'word' mode: "bee… bee is for ball". */
       speak: string | null;
     }
   | {
       kind: 'digit';
       digit: number; // 0..9
       display: string; // '0'…'9'
-      /** Emoji repeated `digit` times around the number (counting!). */
+      /** Picture counted out on the card, e.g. '⭐'. */
       countEmoji: string;
+      /** Plural noun for the picture, e.g. 'stars' ('star' when digit is 1). */
+      countNoun: string;
       color: NamedColor;
-      speak: string | null; // e.g. 'three'
+      /** Spoken one per TIMING.countStepMs as pictures appear: ['one','two','three']. Empty for 0. */
+      countWords: string[];
+      /** Spoken after counting: 'three stars!' / 'zero — none!'. Null when speech is off. */
+      speak: string | null;
     }
   | {
       kind: 'shape';
       shape: ShapeKind;
       color: NamedColor;
-      speak: string | null; // e.g. 'blue star'
+      /** 'circle', 'star'… */
+      label: string;
+      /** 'blue circle', or null. */
+      speak: string | null;
     }
   | {
-      kind: 'emoji';
+      kind: 'picture';
+      /** Always the same picture for the same key (no randomness). */
       emoji: string;
+      /** 'cow', 'duck'… */
+      word: string;
       speak: string | null;
+    }
+  | {
+      kind: 'direction';
+      direction: DirectionName;
+      color: NamedColor;
+      speak: string | null; // 'up!'
     }
   | {
       kind: 'special';
@@ -183,6 +256,79 @@ export interface ContentContext {
   settings: Settings;
   /** Deterministic-in-tests random source returning [0, 1). */
   rng: () => number;
+}
+
+// ---------------------------------------------------------------------------
+// Learning games
+// ---------------------------------------------------------------------------
+
+export type Challenge =
+  | {
+      kind: 'find-letter';
+      /** Upper-case target 'A'…'Z'. */
+      target: string;
+      /** Cased per settings, e.g. 'B' or 'Bb'. */
+      display: string;
+      word: WordEntry;
+      color: NamedColor;
+      /** Spoken prompt: 'Can you find bee?' */
+      prompt: string;
+    }
+  | {
+      kind: 'find-number';
+      target: number; // 0..9
+      display: string;
+      color: NamedColor;
+      prompt: string; // 'Can you find three?'
+    }
+  | {
+      kind: 'spell';
+      word: WordEntry;
+      /** Upper-case letters of the word, e.g. ['C','A','T']. */
+      letters: string[];
+      /** Index of the next letter to press (0..letters.length). */
+      index: number;
+      color: NamedColor;
+      prompt: string; // "Let's spell cat. Find see."
+    };
+
+export type HintLevel = 0 | 1 | 2;
+
+export type ModeOutcome =
+  /** Explore mode, or this key is not part of the game (arrows, Space…): free-play it. */
+  | { result: 'free' }
+  | {
+      result: 'correct';
+      /** The challenge as it is after this press. */
+      challenge: Challenge;
+      /** True when the whole challenge is complete (find: always; spell: last letter). */
+      complete: boolean;
+      /** The next challenge when complete (already current), else null. */
+      next: Challenge | null;
+      /** Praise or next-letter prompt to speak, e.g. 'Yes! That is bee!' / 'Now find ay.' */
+      say: string;
+    }
+  | {
+      result: 'wrong';
+      challenge: Challenge;
+      /** Wrong presses on this challenge so far. */
+      attempts: number;
+      /** 0 none, 1 show where the key is on the mini keyboard, 2 also pulse it and say where. */
+      hint: HintLevel;
+      /** Gentle redirect to speak (never negative), e.g. 'That is em. Can you find bee?' — null to stay quiet (rate-limited). */
+      say: string | null;
+    };
+
+export interface LearningGame {
+  readonly mode: PlayMode;
+  setMode(mode: PlayMode, ctx: ContentContext): Challenge | null;
+  current(): Challenge | null;
+  /** Start a fresh round for the current mode (null in explore). */
+  begin(ctx: ContentContext): Challenge | null;
+  /** Judge what a key press means. */
+  judge(content: KeyContent, ctx: ContentContext): ModeOutcome;
+  /** Replace the current challenge (parent skip / long idle). */
+  skip(ctx: ContentContext): Challenge | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -277,17 +423,26 @@ export interface Lockdown {
 // Audio
 // ---------------------------------------------------------------------------
 
+/** Quiet, warm, non-cartoon effects. Nothing harsh, nothing that sounds like "wrong". */
 export type SoundEffect =
-  | 'pop' | 'bubble' | 'boing' | 'whoosh' | 'sparkle'
-  | 'chime' | 'tada' | 'swoosh' | 'thud' | 'twinkle';
+  | 'tap'      // soft wooden tick (taps, quiet key feedback when notes are off)
+  | 'pop'      // soft round pop (a card pressed, a bubble)
+  | 'swipe'    // airy page-turn (clear, cards gliding)
+  | 'chime'    // gentle two-note chime (prompt appears)
+  | 'success'  // warm rising three-note phrase (found it!)
+  | 'retry'    // neutral soft two-note "hmm?" — encouraging, never a buzzer
+  | 'count'    // soft tick that pitches up per counted item
+  | 'complete';// fuller warm phrase (a word spelled, a round finished)
 
 export interface NoteOptions {
-  /** 0..1, default 0.8. */
+  /** 0..1, default 0.7. */
   velocity?: number;
   /** Stereo position -1 (left) … 1 (right). */
   pan?: number;
   /** Seconds; the timbre decides a sensible default. */
   duration?: number;
+  /** For 'count': which item (0-based) — pitches climb the scale. */
+  step?: number;
 }
 
 export interface AudioEngine {
@@ -297,15 +452,11 @@ export interface AudioEngine {
   setVolume(volume: number): void; // 0..1
   setMuted(muted: boolean): void;
   setTimbre(timbre: Timbre): void;
-  /**
-   * Key the melodic effects (sparkle, twinkle, chime, tada) to the world's
-   * major pentatonic scale rooted at `rootMidi`, so they never clash with key
-   * notes. Only the pitch class matters (effects keep their own register).
-   */
+  /** Key melodic effects to the world's major pentatonic scale rooted at `rootMidi`. */
   setRoot(rootMidi: number): void;
   /** Play a MIDI note with the current timbre. */
   note(midi: number, options?: NoteOptions): void;
-  /** Play notes as a quick rising arpeggio (smash, rainbow…). */
+  /** Play notes as a gentle rising arpeggio. */
   chord(midis: number[], options?: NoteOptions & { spread?: number }): void;
   effect(name: SoundEffect, options?: NoteOptions): void;
   /** Smoothly scale output (wind-down). 1 = normal, 0 = silent. */
@@ -334,9 +485,18 @@ export interface Speaker {
   onVoicesChanged(listener: () => void): () => void;
   /**
    * 'low' (default): skip if something is being said or was said very recently.
-   * 'high': cancel whatever is playing and say this now.
+   * 'high': cancel whatever is playing (and any running sequence) and say this now.
    */
   say(text: string, priority?: 'low' | 'high'): void;
+  /**
+   * Say `parts` one after another, starting part i at i × stepMs (counting
+   * "one… two… three…", naming rainbow colours). Cancels anything playing and
+   * any previous sequence. `then` (optional) is spoken right after the last part.
+   */
+  sequence(parts: string[], stepMs: number, then?: string | null): void;
+  /** True while a sequence is still running. */
+  readonly sequencing: boolean;
+  /** Stops speech and any pending sequence. Always safe. */
   cancel(): void;
 }
 
@@ -356,24 +516,34 @@ export interface SceneOptions {
   intensity: Intensity;
   size: SizeLevel;
   faces: boolean;
-  /** CSS font-family for glyphs, e.g. '"Fredoka", system-ui, sans-serif'. */
+  layout: Layout;
+  /** CSS font-family for letters, numbers and words on cards (Andika — literacy letterforms). */
   fontFamily: string;
 }
 
-export interface GlyphSpec {
-  /** 1–3 characters, e.g. 'A', 'Aa', '7'. */
-  text: string;
-  x: number;
-  y: number;
-  color: NamedColor;
-  /** Picture shown with the glyph (beside or above it), e.g. '🍎'. */
-  emoji?: string | null;
-  /** Small word under the glyph, e.g. 'apple'. */
-  caption?: string | null;
-  /** Count mode: draw `count` copies of `emoji` orbiting the glyph (digits). */
-  count?: number;
-  /** Extra size multiplier on top of settings. Default 1. */
-  scale?: number;
+/** Card kinds mirror what a press teaches. */
+export type CardKind = 'letter' | 'digit' | 'shape' | 'picture' | 'direction';
+
+export interface CardSpec {
+  kind: CardKind;
+  /** Big glyph(s) for letter/digit cards: 'Bb', 'b', '3'. */
+  text?: string | null;
+  /** Picture: the letter's word picture, the counted picture (digits) or the picture itself. */
+  picture?: string | null;
+  /** Word shown on the card's bottom line: 'ball', 'blue circle', 'up', 'cow'. */
+  word?: string | null;
+  /** [start, end) range inside `word` drawn in the card colour's ink (the featured letter, or the colour word). */
+  highlight?: [number, number] | null;
+  shape?: ShapeKind | null;
+  direction?: DirectionName | null;
+  /** Digit cards: reveal `count` pictures one by one, one every TIMING.countStepMs, in a ten-frame (rows of 5). */
+  count?: number | null;
+  /** Colour the card teaches (letters/digits/shapes/directions). Pictures use the world's neutral surface when absent. */
+  color?: NamedColor | null;
+  /** Keyboard layout only: card centre. Focus layout ignores it. */
+  at?: { x: number; y: number } | null;
+  /** 'small' for secondary cards (wrong answers in games, extra keys of a smash). */
+  emphasis?: 'normal' | 'small';
 }
 
 export interface ShapeSpec {
@@ -391,42 +561,57 @@ export interface EmojiSpec {
   scale?: number;
 }
 
+export interface PokeResult {
+  kind: CardKind | 'shape' | 'emoji';
+  /** The card id when a card was poked, else null. */
+  cardId: number | null;
+  /** Card text/word, shape kind or emoji character. */
+  value: string;
+  color: NamedColor | null;
+}
+
 export interface Scene {
   setWorld(world: World): void; // cross-fades the backdrop
   setOptions(options: SceneOptions): void;
   /**
    * 0 = normal … 1 = asleep. Used for the session wind-down: slows motion,
-   * dims colours, thins particles. Changes should be eased by the scene.
+   * dims gently, thins particles. Changes are eased by the scene.
    */
   setCalm(level: number): void;
-  spawnGlyph(spec: GlyphSpec): void;
+  /**
+   * Show a flashcard. Focus layout: it becomes the centre card and the previous
+   * centre card glides to the shelf. Keyboard layout: it appears at `spec.at`.
+   * Returns the card id.
+   */
+  showCard(spec: CardSpec): number;
+  /** Small matte shape at a point (taps). */
   spawnShape(spec: ShapeSpec): void;
+  /** A friend drifting gently (idle) or a picture at a tap point. */
   spawnEmoji(spec: EmojiSpec): void;
-  /** Particle burst; power 0..2 (1 = a normal key press). */
+  /** A few matte pieces (world particle style); power 0..2. Subtle — never a firework. */
   burst(x: number, y: number, color: NamedColor, power?: number): void;
-  /** Expanding ring at a point (taps). */
+  /** Soft expanding ring at a point (taps). */
   ripple(x: number, y: number, color: NamedColor): void;
-  /** Add a point to a pointer's sparkle trail. */
+  /** Finger painting: add a point to a pointer's matte brush stroke. */
   trail(x: number, y: number, color: NamedColor, pointerId: number): void;
   endTrail(pointerId: number): void;
-  special(effect: SpecialEffect, at?: { x: number; y: number }): void;
   /**
-   * If an object is under (x, y), make it react (jiggle/spin + small burst) and
-   * return what it is so the game can replay its sound; otherwise null.
+   * rainbow: paints `colors` as bands one per TIMING.rainbowBandMs (game names them in step).
+   * clear: every card glides away gently. celebrate: soft matte confetti falls and the centre card hops.
+   */
+  special(effect: SpecialEffect, options?: { at?: { x: number; y: number }; colors?: NamedColor[] }): void;
+  /** Gentle pulse on a card (e.g. replaying it). No-op for unknown ids. */
+  pulseCard(id: number): void;
+  /**
+   * If something is under (x, y), make it react (a small press-in bounce) and
+   * return what it is so the game can replay its sound/word; otherwise null.
    */
   poke(x: number, y: number): PokeResult | null;
-  /** Number of live big objects (glyphs/shapes/emoji), for caps and idle logic. */
+  /** Number of live objects (cards, shapes, emoji), for caps and idle logic. */
   readonly objectCount: number;
   update(dt: number, now: number): void;
   draw(): void;
   resize(width: number, height: number, dpr: number): void;
-}
-
-export interface PokeResult {
-  kind: 'glyph' | 'shape' | 'emoji';
-  /** Glyph text, shape kind or emoji character. */
-  value: string;
-  color: NamedColor | null;
 }
 
 export interface Stage {
@@ -450,6 +635,10 @@ export interface SessionStats {
   keys: number;
   taps: number;
   smashes: number;
+  /** Learning-game answers this session. */
+  found: number;
+  /** Words spelled this session. */
+  spelled: number;
   /** Most pressed keys, as [display label, count], highest first, max 5. */
   topKeys: Array<[string, number]>;
   /** Milliseconds of active play. */
@@ -458,6 +647,7 @@ export interface SessionStats {
 
 export interface ParentPanelDeps {
   store: SettingsStore;
+  progress: ProgressStore;
   worlds: World[];
   speaker: Speaker;
   getStats(): SessionStats;
@@ -473,6 +663,7 @@ export interface ParentPanelDeps {
     relock(): void;
     testSound(): void;
     resetStats(): void;
+    resetProgress(): void;
     install(): void;
   };
 }
@@ -488,12 +679,27 @@ export interface StartScreenDeps {
   worlds: World[];
   /** Called from the user gesture (click/tap/key) that starts play. */
   onStart(): void;
-  /** Optional: open the grown-up panel from the start screen (a small settings link). */
+  /** Open the grown-up panel from the start screen (a small settings link). */
   onOpenControls?(): void;
 }
 
 export interface StartScreen {
   show(): void;
+  hide(): void;
+  readonly isVisible: boolean;
+}
+
+/**
+ * Learning-game prompt: a compact card at the top centre ("Find  B  ⚽"), with a
+ * mini keyboard that appears as a hint and highlights where the key is.
+ */
+export interface PromptBar {
+  /** Show/replace the prompt for a challenge (spell: word letters with done ones filled). */
+  show(challenge: Challenge): void;
+  /** Update the spell progress or hint state without re-animating the card. */
+  update(challenge: Challenge, hint: HintLevel): void;
+  /** Brief success state (check + colour fill), ~900 ms; the game shows the next challenge after. */
+  celebrate(): void;
   hide(): void;
   readonly isVisible: boolean;
 }
