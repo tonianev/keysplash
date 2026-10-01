@@ -5,9 +5,8 @@
  * Everything is bundled (fonts included); the service worker precaches the
  * build so KeySplash runs offline after the first visit.
  */
-import '@fontsource/fredoka/500.css';
-import '@fontsource/fredoka/600.css';
-import '@fontsource/fredoka/700.css';
+import '@fontsource/andika/400.css';
+import '@fontsource/andika/700.css';
 import './styles.css';
 import { registerSW } from 'virtual:pwa-register';
 import { WebAudioEngine } from './audio/engine';
@@ -16,13 +15,17 @@ import { FONT_FAMILY, Game, reducedMotionQuery, sceneOptionsFor } from './game';
 import { DomKeyboardInput } from './input/keyboard';
 import { BrowserLockdown } from './input/lockdown';
 import { DomPointerInput } from './input/pointer';
+import { LessonContent } from './content';
 import { keyMap } from './keymap';
+import { LearningGames } from './modes';
+import { LocalProgressStore } from './progress';
 import { CanvasScene } from './render/scene';
 import { CanvasStage } from './render/stage';
 import { LocalSettingsStore } from './settings';
 import { InstallPrompt } from './ui/install';
 import { DomOverlays } from './ui/overlays';
 import { DomParentPanel } from './ui/parent-panel';
+import { DomPromptBar } from './ui/prompt-bar';
 import { DomStartScreen } from './ui/start-screen';
 import { WORLDS } from './worlds';
 
@@ -41,7 +44,7 @@ function safeLocalStorage(): Storage | null {
   }
 }
 
-/** Resolves once Fredoka 700 is ready, or after the timeout (never rejects). */
+/** Resolves once Andika is ready, or after the timeout (never rejects). */
 function waitForFont(timeoutMs: number): Promise<void> {
   const fonts = typeof document !== 'undefined' ? document.fonts : undefined;
   if (!fonts || typeof fonts.load !== 'function') return Promise.resolve();
@@ -52,7 +55,7 @@ function waitForFont(timeoutMs: number): Promise<void> {
       resolve();
     };
     try {
-      fonts.load('700 100px Fredoka').then(done, done);
+      Promise.all([fonts.load('700 100px Andika'), fonts.load('400 20px Andika')]).then(done, done);
     } catch {
       done();
     }
@@ -82,6 +85,7 @@ async function boot(): Promise<void> {
   if (!(canvas instanceof HTMLCanvasElement) || !ui) throw new Error('KeySplash: #stage canvas or #ui root missing');
 
   const store = new LocalSettingsStore(safeLocalStorage());
+  const progress = new LocalProgressStore(safeLocalStorage());
   await waitForFont(FONT_TIMEOUT_MS);
 
   const settings = store.get();
@@ -112,6 +116,14 @@ async function boot(): Promise<void> {
     overlays,
     worlds: WORLDS,
     fontFamily: FONT_FAMILY,
+    progress,
+    games: new LearningGames(progress),
+    lessons: new LessonContent(),
+    setTheme: (dark) => {
+      ui.dataset.theme = dark ? 'dark' : 'light';
+      document.querySelector('meta[name="theme-color"]')?.setAttribute('content', dark ? '#141b2d' : '#f5f2ec');
+    },
+    createPromptBar: () => new DomPromptBar(ui),
     reducedMotion,
     viewport: () => ({ width: stage.width, height: stage.height }),
     createKeyboard: (handlers, secretWord) => new DomKeyboardInput(window, handlers, keyMap, { secretWord }),

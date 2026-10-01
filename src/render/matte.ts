@@ -212,6 +212,8 @@ export class Ripples {
 const STROKE_MAX = 10;
 const STROKE_POINTS = 120;
 const STROKE_FADE = 3;
+/** A stroke that gets no new points for this long counts as finished (mouse hover never "releases"). */
+const STROKE_IDLE = 0.5;
 
 interface Stroke {
   pointerId: number;
@@ -223,6 +225,8 @@ interface Stroke {
   color: string;
   /** Seconds since the stroke ended, or -1 while drawing. */
   ended: number;
+  /** Seconds since the last point was added. */
+  idle: number;
   active: boolean;
 }
 
@@ -233,13 +237,18 @@ export class Paint {
     for (let i = 0; i < STROKE_MAX; i++) {
       this.strokes.push({
         pointerId: -1, xs: new Float32Array(STROKE_POINTS), ys: new Float32Array(STROKE_POINTS),
-        head: 0, len: 0, color: '#000', ended: 0, active: false,
+        head: 0, len: 0, color: '#000', ended: 0, idle: 0, active: false,
       });
     }
   }
 
   add(x: number, y: number, color: NamedColor, pointerId: number): void {
     let s = this.strokes.find((k) => k.active && k.ended < 0 && k.pointerId === pointerId);
+    if (s && s.color !== color.hex) {
+      // Same pointer, new colour: finish this stroke and start a fresh one.
+      s.ended = 0;
+      s = undefined;
+    }
     if (!s) {
       // Reuse a free slot, else the stroke that ended longest ago, else the oldest.
       s = this.strokes.find((k) => !k.active) ?? this.strokes.reduce((a, b) => (b.ended > a.ended ? b : a));
@@ -250,6 +259,7 @@ export class Paint {
       s.ended = -1;
       s.active = true;
     }
+    s.idle = 0;
     const i = (s.head + s.len) % STROKE_POINTS;
     if (s.len === STROKE_POINTS) s.head = (s.head + 1) % STROKE_POINTS;
     else s.len++;
@@ -263,7 +273,12 @@ export class Paint {
 
   update(dt: number): void {
     for (const s of this.strokes) {
-      if (!s.active || s.ended < 0) continue;
+      if (!s.active) continue;
+      if (s.ended < 0) {
+        s.idle += dt;
+        if (s.idle >= STROKE_IDLE) s.ended = 0;
+        continue;
+      }
       s.ended += dt;
       if (s.ended >= STROKE_FADE) s.active = false;
     }

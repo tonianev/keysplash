@@ -151,6 +151,14 @@ export class CanvasScene implements Scene {
     this.fade = this.options.reduceMotion ? 1 : 0;
     if (this.fade >= 1) this.oldBackdrop = null;
     this.particles.colors = world.palette.map((c) => c.hex);
+    // Cards and shapes keep their colour *name* but take the new world's tones
+    // (light worlds: pale cards + deep ink; dark worlds: deep cards + light ink).
+    const retone = (color: NamedColor | null | undefined): NamedColor | null | undefined =>
+      color ? (world.palette.find((p) => p.name === color.name) ?? color) : color;
+    for (const c of [this.centre, ...this.shelf, ...this.free, ...this.leaving]) {
+      if (c?.spec.color) c.spec = { ...c.spec, color: retone(c.spec.color) };
+    }
+    for (const t of this.things) t.color = retone(t.color) ?? null;
     this.invalidateSprites();
   }
 

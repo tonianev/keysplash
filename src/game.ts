@@ -13,17 +13,22 @@
  * page visibility and reduced-motion query are injectable for tests. Nothing
  * here runs per frame except `update()`, which does a handful of comparisons.
  */
-import { cheer, contentForKey, contentForTap, shapeLabel } from './content';
-import { pentatonic } from './keymap';
+import { LessonContent, praise, rainbowColors } from './content';
+import { describeKeyLocation, pentatonic } from './keymap';
+import { TIMING } from './types';
 import type {
   AudioEngine,
+  CardSpec,
+  Challenge,
   ContentContext,
   KeyContent,
   KeyMap,
+  ModeOutcome,
   KeyPosition,
   KeyPress,
   KeyboardHandlers,
   KeyboardInput,
+  LearningGame,
   LockStatus,
   Lockdown,
   NamedColor,
@@ -33,6 +38,8 @@ import type {
   PokeResult,
   PointerHandlers,
   PointerInput,
+  ProgressStore,
+  PromptBar,
   Scene,
   SceneOptions,
   SessionStats,
@@ -41,7 +48,6 @@ import type {
   SmashEvent,
   SoundEffect,
   Speaker,
-  SpecialEffect,
   StartScreen,
   StartScreenDeps,
   World,
@@ -49,8 +55,8 @@ import type {
 } from './types';
 import { WORLDS, WORLD_ORDER, nextWorld } from './worlds';
 
-/** Glyph font: Fredoka is bundled via @fontsource (no network). */
-export const FONT_FAMILY = '"Fredoka", system-ui, sans-serif';
+/** Card font: Andika (literacy letterforms) is bundled via @fontsource (no network). */
+export const FONT_FAMILY = '"Andika", system-ui, sans-serif';
 
 // ---------------------------------------------------------------------------
 // Tuning
@@ -63,8 +69,12 @@ const JITTER = 0.04;
 /** Random spots avoid this many previous spots. */
 const RECENT_SPOTS = 3;
 const SPOT_TRIES = 8;
-/** Held keys sparkle at most 8 times a second. */
-const REPEAT_INTERVAL_MS = 125;
+/** After a correct answer, the next prompt appears after at least this long. */
+const NEXT_PROMPT_MS = 1400;
+/** In a game, repeat the prompt once after this long without input. */
+const IDLE_PROMPT_MS = 25_000;
+/** Spoken lines take roughly this long per character (for scheduling). */
+const SPEECH_MS_PER_CHAR = 65;
 /** Keys closer together than this are a mash (or the start of a palm smash): no speech. */
 const MASH_GAP_MS = 90;
 /** After a smash, stay quiet this long so the cheer isn't cut off. */
@@ -86,15 +96,13 @@ const NAME_CHEER_SPREAD = 11;
 const MEMORY_SIZE = 64;
 /** Distinct key labels counted for stats (a keyboard has ~110). */
 const MAX_LABELS = 200;
-/** Remembered spawn spots for repeats (one per physical key). */
-const MAX_KEY_SPOTS = 160;
 /** Pointer drag states kept at once (the pointer module tracks ≤ 16). */
 const MAX_DRAGS = 16;
 const HOVER_TRAIL_ID = -1;
 /** A hover pause longer than this starts a new trail colour. */
 const HOVER_STROKE_GAP_MS = 400;
 
-const FALLBACK_COLOR: NamedColor = { name: 'blue', hex: '#5cc8ff' };
+const FALLBACK_COLOR: NamedColor = { name: 'blue', hex: '#4A86D8', container: '#DFEAFB', ink: '#1D4F99' };
 const ARROW_LABELS: Record<string, string> = { ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→' };
 
 // ---------------------------------------------------------------------------
@@ -135,6 +143,7 @@ export function sceneOptionsFor(settings: Settings, systemReduce: boolean, fontF
     intensity: settings.intensity,
     size: settings.size,
     faces: settings.faces,
+    layout: settings.layout,
     fontFamily,
   };
 }
@@ -152,6 +161,14 @@ function documentVisibility(): VisibilitySource {
 
 function noop(): void {
   // Intentionally empty.
+}
+
+/** The key code a challenge wants next (for spoken location hints). */
+function targetCode(challenge: Challenge): string | null {
+  if (challenge.kind === 'find-letter') return `Key${challenge.target}`;
+  if (challenge.kind === 'find-number') return `Digit${challenge.target}`;
+  const next = challenge.letters[challenge.index];
+  return next ? `Key${next}` : null;
 }
 
 function speechOn(s: Settings): boolean {
@@ -176,6 +193,12 @@ export interface GameDeps {
   createPointer(handlers: PointerHandlers): PointerInput;
   createStartScreen(deps: StartScreenDeps): StartScreen;
   createParentPanel(deps: ParentPanelDeps): ParentPanel;
+  createPromptBar(): PromptBar;
+  progress: ProgressStore;
+  games: LearningGame;
+  lessons?: LessonContent;
+  /** Called with true on dark worlds so the DOM chrome can switch theme. */
+  setTheme?(dark: boolean): void;
   worlds?: Record<WorldId, World>;
   install?: { canInstall(): boolean; prompt(): void };
   fontFamily?: string;
@@ -198,15 +221,12 @@ interface Spot {
   y: number;
 }
 
-interface KeySpot extends Spot {
-  color: NamedColor;
-}
-
-/** What an object on screen sounded like, so a poke can replay it. */
+/** What a card sounded like, so poking it replays the lesson. */
 interface Memory {
   midi: number | null;
-  effect: SoundEffect | null;
   speak: string | null;
+  /** Digit cards replay their counting. */
+  count: string[] | null;
 }
 
 interface DragState {
@@ -238,6 +258,11 @@ export class Game {
   private readonly pointer: PointerInput;
   private readonly startScreen: StartScreen;
   private readonly panel: ParentPanel;
+  private readonly promptBar: PromptBar;
+  private readonly progress: ProgressStore;
+  private readonly games: LearningGame;
+  private readonly lessons: LessonContent;
+  private readonly setTheme: (dark: boolean) => void;
   private readonly unsubscribers: Array<() => void> = [];
 
   private state: PlayState = 'idle';
@@ -262,16 +287,22 @@ export class Game {
 
   // Keys
   private lastKeyAt = Number.NEGATIVE_INFINITY;
-  private lastRepeatAt = Number.NEGATIVE_INFINITY;
   private quietUntil = Number.NEGATIVE_INFINITY;
   private keysSinceCheer = 0;
   private nextCheerAt = NAME_CHEER_MIN;
-  private readonly keySpots = new Map<string, KeySpot>();
+  /** Pending timers for counting ticks, rainbow notes and the next prompt (bounded). */
+  private readonly lessonTimers: Array<ReturnType<typeof setTimeout>> = [];
+  private nextPromptTimer: ReturnType<typeof setTimeout> | null = null;
+  private rainbowUntil = Number.NEGATIVE_INFINITY;
+  /** The location hint has been spoken for the current challenge. */
+  private hintSpoken = false;
+  /** Clock time to repeat the game prompt when idle, or Infinity. */
+  private idlePromptAt = Number.POSITIVE_INFINITY;
   private readonly recentX = new Float64Array(RECENT_SPOTS);
   private readonly recentY = new Float64Array(RECENT_SPOTS);
   private recentNext = 0;
   private recentCount = 0;
-  private readonly memory = new Map<string, Memory>();
+  private readonly memory = new Map<number, Memory>();
 
   // Pointers
   private readonly drags = new Map<number, DragState>();
@@ -284,6 +315,8 @@ export class Game {
   private keys = 0;
   private taps = 0;
   private smashes = 0;
+  private found = 0;
+  private spelled = 0;
   private playMs = 0;
   private readonly labels = new Map<string, number>();
 
@@ -305,6 +338,10 @@ export class Game {
     this.visibility = deps.visibility ?? documentVisibility();
     this.reduceQuery = deps.reducedMotion !== undefined ? deps.reducedMotion : reducedMotionQuery();
     this.systemReduce = !!this.reduceQuery?.matches;
+    this.progress = deps.progress;
+    this.games = deps.games;
+    this.lessons = deps.lessons ?? new LessonContent();
+    this.setTheme = deps.setTheme ?? noop;
 
     this.settings = this.store.get();
     this.world = this.worldFor(this.settings.world);
@@ -325,8 +362,10 @@ export class Game {
       onCornerHold: this.onCornerHold,
       onCornerProgress: this.onCornerProgress,
     });
+    this.promptBar = deps.createPromptBar();
     this.panel = deps.createParentPanel({
       store: this.store,
+      progress: this.progress,
       worlds: worldList,
       speaker: this.speaker,
       getStats: () => this.getStats(),
@@ -338,6 +377,7 @@ export class Game {
         relock: () => this.relock(),
         testSound: () => this.testSound(),
         resetStats: () => this.resetStats(),
+        resetProgress: () => this.progress.reset(),
         install: () => this.install?.prompt(),
       },
     });
@@ -399,7 +439,16 @@ export class Game {
     this.pointer.setEnabled(true);
 
     const name = this.settings.childName;
-    this.speaker.say(name ? `Hi, ${name}!` : "Let's play!", 'high');
+    const greeting = name ? `Hi, ${name}!` : "Let's play!";
+    const challenge = this.games.setMode(this.settings.mode, this.content);
+    if (challenge) {
+      this.showChallenge(challenge, false);
+      // Greeting first, then the first prompt.
+      this.speaker.sequence([greeting], 1300, challenge.prompt);
+    } else {
+      this.promptBar.hide();
+      this.speaker.say(greeting, 'high');
+    }
   }
 
   /** Leave play: exit fullscreen and locks, show the start screen. */
@@ -418,6 +467,8 @@ export class Game {
     this.pointer.detach();
     this.endAllTrails();
     this.speaker.cancel();
+    this.clearLessonTimers();
+    this.promptBar.hide();
     this.resetSession();
     this.lockdown.setConfirmExit(false);
     this.exitLockdown();
@@ -461,9 +512,15 @@ export class Game {
       }
     }
 
-    if (now >= this.nextIdleAt) {
-      this.spawnIdleFriend();
-      this.nextIdleAt = now + IDLE_EVERY_MS + (this.rng() * 2 - 1) * IDLE_SPREAD_MS;
+    if (s.mode === 'explore') {
+      if (now >= this.nextIdleAt) {
+        this.spawnIdleFriend();
+        this.nextIdleAt = now + IDLE_EVERY_MS + (this.rng() * 2 - 1) * IDLE_SPREAD_MS;
+      }
+    } else if (now >= this.idlePromptAt) {
+      this.idlePromptAt = Number.POSITIVE_INFINITY; // once per quiet spell
+      const challenge = this.games.current();
+      if (challenge) this.speaker.say(challenge.prompt, 'low');
     }
   }
 
@@ -475,6 +532,8 @@ export class Game {
       keys: this.keys,
       taps: this.taps,
       smashes: this.smashes,
+      found: this.found,
+      spelled: this.spelled,
       topKeys: top.slice(0, 5),
       playMs: Math.round(this.playMs),
     };
@@ -485,6 +544,8 @@ export class Game {
     this.keys = 0;
     this.taps = 0;
     this.smashes = 0;
+    this.found = 0;
+    this.spelled = 0;
     this.playMs = 0;
     this.labels.clear();
   }
@@ -495,6 +556,7 @@ export class Game {
     this.unsubscribers.length = 0;
     this.keyboard.detach();
     this.pointer.detach();
+    this.clearLessonTimers();
   }
 
   // -------------------------------------------------------------------------
@@ -512,6 +574,7 @@ export class Game {
     this.speaker.setEnabled(speechOn(s));
     this.scene.setOptions(this.sceneOptions());
     this.scene.setWorld(this.world);
+    this.setTheme(this.world.dark);
     this.keyboard.setSecretWord(s.secretWord);
   }
 
@@ -531,7 +594,8 @@ export class Game {
       next.motion !== prev.motion ||
       next.intensity !== prev.intensity ||
       next.size !== prev.size ||
-      next.faces !== prev.faces
+      next.faces !== prev.faces ||
+      next.layout !== prev.layout
     ) {
       this.scene.setOptions(this.sceneOptions());
     }
@@ -543,9 +607,22 @@ export class Game {
     }
     if (next.autoRotate !== prev.autoRotate || next.rotateMinutes !== prev.rotateMinutes) this.rotateMs = 0;
     if (!next.trails && prev.trails) this.endAllTrails();
+    if (next.mode !== prev.mode || (next.letterCase !== prev.letterCase && next.mode !== 'explore')) this.applyMode();
     if (next.sessionMinutes !== prev.sessionMinutes && this.state === 'playing') {
       // A new limit counts from now; cancel a wind-down in progress.
       this.resetSession();
+    }
+  }
+
+  /** Switch learning activity: start its first challenge (or hide the prompt for Explore). */
+  private applyMode(): void {
+    this.clearLessonTimers();
+    const challenge = this.games.setMode(this.settings.mode, this.content);
+    if (this.state === 'idle') return;
+    if (challenge) {
+      this.showChallenge(challenge, !this.panel.isOpen);
+    } else {
+      this.promptBar.hide();
     }
   }
 
@@ -570,7 +647,7 @@ export class Game {
   }
 
   private worldFor(id: WorldId): World {
-    return this.worlds[id] ?? this.worlds.space ?? WORLDS.space;
+    return this.worlds[id] ?? this.worlds.paper ?? WORLDS.paper;
   }
 
   private setWorld(id: WorldId): void {
@@ -581,8 +658,15 @@ export class Game {
     this.scene.setWorld(world);
     this.audio.setTimbre(world.timbre);
     this.audio.setRoot(world.rootMidi);
+    this.setTheme(world.dark);
     this.rotateMs = 0;
     this.hoverColor = null;
+    // Keep the prompt's colour name but take the new world's tones.
+    const challenge = this.games.current();
+    if (challenge && this.state !== 'idle' && this.promptBar.isVisible) {
+      const color = world.palette.find((c) => c.name === challenge.color.name) ?? challenge.color;
+      this.promptBar.show({ ...challenge, color } as Challenge);
+    }
   }
 
   // -------------------------------------------------------------------------
@@ -675,6 +759,7 @@ export class Game {
   private openPanel(): void {
     if (this.panel.isOpen) return;
     this.speaker.cancel();
+    this.clearLessonTimers();
     if (this.state !== 'idle') {
       this.disableInputs();
       this.overlays.hideResume(); // the panel's resume re-requests fullscreen
@@ -693,6 +778,9 @@ export class Game {
     this.enableInputs();
     this.markInput(this.now());
     this.unlockAudio();
+    // A game prompt may have been cut off by the panel: show and say it again.
+    const challenge = this.games.current();
+    if (challenge && this.settings.mode !== 'explore') this.showChallenge(challenge, true);
     // Escape is not a user activation, so this may fail: then show the resume screen.
     this.reenterIfLost(true);
   }
@@ -763,6 +851,8 @@ export class Game {
     this.state = 'alldone';
     this.scene.setCalm(1);
     this.speaker.cancel();
+    this.clearLessonTimers();
+    this.promptBar.hide();
     // Pointer off; the keyboard stays on so the secret word still opens the panel
     // (onKey / onSmash ignore everything else in this state).
     this.pointer.setEnabled(false);
@@ -781,6 +871,8 @@ export class Game {
     this.enableInputs();
     this.markInput(this.now());
     this.unlockAudio();
+    const challenge = this.games.current();
+    if (challenge && this.settings.mode !== 'explore') this.showChallenge(challenge, true);
     // The hold button completes 3 s after pointerdown, still inside the browser's
     // activation window in Chromium/Firefox; elsewhere the resume screen takes over.
     this.reenterIfLost(true);
@@ -790,9 +882,10 @@ export class Game {
     const friends = this.world.friends;
     if (friends.length === 0) return;
     const { width, height } = this.size();
-    const spot = this.randomSpot(width, height);
+    const fromLeft = this.rng() < 0.5;
     const emoji = friends[this.index(friends.length)];
-    this.scene.spawnEmoji({ emoji, x: spot.x, y: spot.y, scale: 0.6 });
+    // Starts just off-screen so the scene drifts it slowly across.
+    this.scene.spawnEmoji({ emoji, x: fromLeft ? -30 : width + 30, y: height * (0.2 + this.rng() * 0.5), scale: 0.7 });
   }
 
   // -------------------------------------------------------------------------
@@ -803,97 +896,190 @@ export class Game {
     if (this.state !== 'playing' || this.panel.isOpen) return;
     const now = this.now();
     this.markInput(now);
-    if (press.repeat) {
-      this.onRepeat(press, now);
-      return;
-    }
+    // Holding a key teaches nothing new: stay calm.
+    if (press.repeat) return;
     this.unlockAudio();
 
-    const content = contentForKey(press, this.content);
+    const content = this.lessons.forKey(press, this.content);
     this.countKey(press, content);
-    const isEnter = content.kind === 'special' && content.effect === 'sweep';
-    const speak = this.speechFor(content.speak, now, isEnter);
+    if (content.kind === 'letter') this.progress.markSeen(content.letter);
+    else if (content.kind === 'digit') this.progress.markSeen(String(content.digit));
+
+    const mashing = now - this.lastKeyAt < MASH_GAP_MS || now < this.quietUntil;
     this.lastKeyAt = now;
 
+    // Learning games judge deliberate presses only — mashing is always free play.
+    if (!mashing && this.settings.mode !== 'explore') {
+      const outcome = this.games.judge(content, this.content);
+      if (outcome.result === 'correct') {
+        this.onCorrect(content, outcome, press);
+        return;
+      }
+      if (outcome.result === 'wrong') {
+        this.onWrong(content, outcome, press);
+        return;
+      }
+    }
+    this.freePlay(content, press, mashing);
+  };
+
+  /** Explore (and non-game keys in games): one card, one soft note, one clear line. */
+  private freePlay(content: KeyContent, press: KeyPress, mashing: boolean): void {
+    const isClear = content.kind === 'special' && content.effect === 'clear';
+    const speak = this.speechFor(content.speak, mashing, isClear);
+
     if (content.kind === 'special') {
-      this.playSpecial(content.effect);
-      this.say(speak);
+      if (content.effect === 'rainbow') this.playRainbow();
+      else if (content.effect === 'clear') {
+        this.clearLessonTimers(false);
+        this.scene.special('clear');
+        this.audio.effect('swipe', { velocity: 0.6 });
+        this.say(speak);
+      }
       return;
     }
 
-    const spot = this.spotFor(press.position);
-    const { x, y } = spot;
-    const root = this.world.rootMidi;
+    const at = this.settings.layout === 'keyboard' ? this.spotFor(press.position) : null;
+    const card = this.cardFor(content, mashing ? 'small' : 'normal', at);
+    const id = this.scene.showCard(card);
+    const x = at?.x ?? this.size().width / 2;
+    const midi = this.keyMap.note(press.code, this.world.rootMidi);
+    this.playNote(midi, x, mashing ? 0.3 : 0.5, 'tap');
+
+    if (content.kind === 'digit') {
+      this.remember(id, midi, content.speak, content.countWords);
+      if (!mashing) this.count(content.countWords, content.speak);
+      return;
+    }
+    this.remember(id, midi, content.speak, null);
+    this.say(speak);
+  }
+
+  /** The flashcard for what a key teaches. */
+  private cardFor(content: KeyContent, emphasis: 'normal' | 'small', at: Spot | null): CardSpec {
     switch (content.kind) {
       case 'letter': {
-        const s = this.settings;
         const word = content.word;
-        this.scene.spawnGlyph({
-          text: content.display,
-          x,
-          y,
-          color: content.color,
-          emoji: s.pictures && word ? word.emoji : null,
-          caption: s.speech === 'word' && word ? word.word : null,
-        });
-        this.scene.burst(x, y, content.color, 1);
-        const midi = this.keyMap.note(press.code, root);
-        this.playNote(midi, x, 0.8, 'pop');
-        this.remember('glyph', content.display, midi, null, content.speak);
-        this.rememberSpot(press.code, x, y, content.color);
-        break;
+        const i = word.at ?? 0;
+        return {
+          kind: 'letter', text: content.display, picture: this.settings.pictures ? word.emoji : null,
+          word: word.word, highlight: [i, i + 1], color: content.color, at, emphasis,
+        };
       }
       case 'digit': {
-        this.scene.spawnGlyph({ text: content.display, x, y, color: content.color, emoji: content.countEmoji, count: content.digit });
-        this.scene.burst(x, y, content.color, 1);
-        const midi = this.keyMap.note(press.code, root);
-        this.playNote(midi, x, 0.8, 'pop');
-        this.remember('glyph', content.display, midi, null, content.speak);
-        this.rememberSpot(press.code, x, y, content.color);
-        break;
+        const label = String(content.digit);
+        return {
+          kind: 'digit', text: content.display, picture: content.countEmoji, count: content.digit,
+          word: `${label} ${content.countNoun}`, highlight: [0, label.length], color: content.color, at, emphasis,
+        };
       }
       case 'shape': {
-        this.scene.spawnShape({ shape: content.shape, x, y, color: content.color });
-        this.scene.burst(x, y, content.color, 1);
-        const midi = this.keyMap.note(press.code, root);
-        this.playNote(midi, x, 0.8, 'pop');
-        this.remember('shape', content.shape, midi, null, content.speak);
-        this.rememberSpot(press.code, x, y, content.color);
-        break;
+        const name = content.color.name;
+        return {
+          kind: 'shape', shape: content.shape, word: `${name} ${content.label}`, highlight: [0, name.length],
+          color: content.color, at, emphasis,
+        };
       }
-      case 'emoji': {
-        const color = this.randomColor();
-        this.scene.spawnEmoji({ emoji: content.emoji, x, y });
-        this.scene.burst(x, y, color, 0.6);
-        this.audio.effect('boing', { velocity: 0.7, pan: this.panFor(x) });
-        this.remember('emoji', content.emoji, null, 'boing', content.speak);
-        this.rememberSpot(press.code, x, y, color);
-        break;
-      }
+      case 'direction':
+        return { kind: 'direction', direction: content.direction, word: content.direction, color: content.color, at, emphasis };
+      case 'picture':
+        return { kind: 'picture', picture: content.emoji, word: content.word, at, emphasis };
+      default:
+        return { kind: 'picture', picture: '⭐', word: null, at, emphasis };
     }
-    this.say(speak);
-  };
+  }
 
-  /** Held key: a small sparkle and a quiet twinkle at the key's spot, ≤ 8/s. No glyph, no speech. */
-  private onRepeat(press: KeyPress, now: number): void {
-    if (now - this.lastRepeatAt < REPEAT_INTERVAL_MS) return;
-    this.lastRepeatAt = now;
-    const known = this.keySpots.get(press.code);
-    let x: number;
-    let y: number;
-    let color: NamedColor;
-    if (known) {
-      x = known.x;
-      y = known.y;
-      color = known.color;
-    } else {
-      const spot = this.mapToSafe(press.position) ?? this.centre();
-      x = spot.x;
-      y = spot.y;
-      color = this.randomColor();
+  /** Count out loud in step with the pictures appearing on the digit card. */
+  private count(words: string[], then: string | null): void {
+    this.clearLessonTimers(false);
+    if (words.length === 0) {
+      this.say(then);
+      return;
     }
-    this.scene.burst(x, y, color, 0.35);
-    this.audio.effect('twinkle', { velocity: 0.35, pan: this.panFor(x) });
+    this.speaker.sequence(words, TIMING.countStepMs, then);
+    for (let i = 0; i < words.length; i++) {
+      this.later(i * TIMING.countStepMs, () => this.audio.effect('count', { velocity: 0.35, step: i }));
+    }
+  }
+
+  /** Space: paint the rainbow band by band while naming each colour. */
+  private playRainbow(): void {
+    const now = this.now();
+    if (now < this.rainbowUntil) return; // let the current rainbow finish
+    const colors = rainbowColors(this.world);
+    this.rainbowUntil = now + colors.length * TIMING.rainbowBandMs + 1500;
+    this.clearLessonTimers(false);
+    this.scene.special('rainbow', { colors });
+    if (this.settings.speech !== 'off') this.speaker.sequence(colors.map((c) => c.name), TIMING.rainbowBandMs);
+    const root = this.world.rootMidi;
+    for (let i = 0; i < colors.length; i++) {
+      this.later(i * TIMING.rainbowBandMs, () => {
+        if (this.settings.notes) this.audio.note(pentatonic(root, i), { velocity: 0.35 });
+      });
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // Learning games
+  // -------------------------------------------------------------------------
+
+  /** Show a challenge in the prompt bar (and optionally say its prompt). */
+  private showChallenge(challenge: Challenge, speak: boolean): void {
+    this.hintSpoken = false;
+    this.promptBar.show(challenge);
+    this.idlePromptAt = this.now() + IDLE_PROMPT_MS;
+    if (speak) this.speaker.say(challenge.prompt, 'high');
+  }
+
+  private onCorrect(content: KeyContent, outcome: Extract<ModeOutcome, { result: 'correct' }>, press: KeyPress): void {
+    const at = this.settings.layout === 'keyboard' ? this.spotFor(press.position) : null;
+    const id = this.scene.showCard(this.cardFor(content, 'normal', at));
+    this.remember(id, this.keyMap.note(press.code, this.world.rootMidi), content.speak, null);
+    this.hintSpoken = false;
+    this.clearLessonTimers();
+    this.speaker.say(outcome.say, 'high');
+
+    const ch = outcome.challenge;
+    if (!outcome.complete) {
+      this.audio.effect('chime', { velocity: 0.45 });
+      this.promptBar.update(ch, 0);
+      return;
+    }
+
+    this.audio.effect(ch.kind === 'spell' ? 'complete' : 'success', { velocity: 0.55 });
+    this.scene.special('celebrate');
+    this.promptBar.celebrate();
+    if (ch.kind === 'spell') {
+      this.progress.markSpelled(ch.word.word);
+      this.spelled++;
+    } else {
+      this.progress.markFound(String(ch.target));
+      this.found++;
+    }
+    const next = outcome.next;
+    if (!next) return;
+    const delay = Math.max(NEXT_PROMPT_MS, outcome.say.length * SPEECH_MS_PER_CHAR);
+    this.nextPromptTimer = setTimeout(() => {
+      this.nextPromptTimer = null;
+      if (this.state === 'playing' && !this.panel.isOpen) this.showChallenge(next, true);
+    }, delay);
+  }
+
+  private onWrong(content: KeyContent, outcome: Extract<ModeOutcome, { result: 'wrong' }>, press: KeyPress): void {
+    // Still show what they pressed (small, on the shelf) — every key teaches something.
+    this.scene.showCard(this.cardFor(content, 'small', this.settings.layout === 'keyboard' ? this.spotFor(press.position) : null));
+    this.audio.effect('retry', { velocity: 0.35 });
+    this.promptBar.update(outcome.challenge, outcome.hint);
+    this.idlePromptAt = this.now() + IDLE_PROMPT_MS;
+    let line = outcome.say;
+    if (outcome.hint >= 2 && !this.hintSpoken) {
+      const code = targetCode(outcome.challenge);
+      if (code) {
+        line = `${line ?? ''} ${describeKeyLocation(code)}`.trim();
+        this.hintSpoken = true;
+      }
+    }
+    if (line) this.speaker.say(line, 'high');
   }
 
   private readonly onSmash = (smash: SmashEvent): void => {
@@ -902,20 +1088,15 @@ export class Game {
     this.markInput(now);
     this.unlockAudio();
     this.smashes++;
-
-    const at = this.mapToSafe(smash.center) ?? this.centre();
-    const pan = this.panFor(at.x);
-    this.scene.special('fireworks', at);
-    this.scene.burst(at.x, at.y, this.randomColor(), 1.5);
+    void smash;
+    // A palm smash is celebrated gently in every mode, never judged as wrong.
+    this.scene.special('celebrate');
     if (this.settings.notes) {
       const root = this.world.rootMidi;
-      const chord = [pentatonic(root, 0), pentatonic(root, 2), pentatonic(root, 4), pentatonic(root, 5), pentatonic(root, 7)];
-      this.audio.chord(chord, { velocity: 0.75, spread: 0.07, pan });
+      this.audio.chord([pentatonic(root, 0), pentatonic(root, 2), pentatonic(root, 4)], { velocity: 0.4, spread: 0.09 });
     }
-    this.audio.effect('sparkle', { velocity: 0.6, pan });
-    // The first keys of a palm fire onKey before the smash is known; 'high' cuts
-    // their speech off, and the quiet window keeps stragglers from talking over it.
-    this.speaker.say(cheer(this.rng), 'high');
+    // The first keys of a palm fire onKey before the smash is known; 'high' cuts them off.
+    this.speaker.say(praise(this.rng, this.settings.childName), 'high');
     this.quietUntil = now + SMASH_QUIET_MS;
     this.lastKeyAt = now;
   };
@@ -925,49 +1106,14 @@ export class Game {
     this.openPanel();
   };
 
-  private playSpecial(effect: SpecialEffect): void {
-    this.scene.special(effect);
-    const root = this.world.rootMidi;
-    switch (effect) {
-      case 'rainbow':
-        if (this.settings.notes) {
-          const scale: number[] = [];
-          for (let step = 0; step <= 5; step++) scale.push(pentatonic(root, step));
-          this.audio.chord(scale, { velocity: 0.55, spread: 0.08 });
-        }
-        this.audio.effect('sparkle', { velocity: 0.6 });
-        break;
-      case 'sweep':
-        this.audio.effect('whoosh', { velocity: 0.8 });
-        break;
-      case 'pop-all':
-        this.audio.effect('pop', { velocity: 0.8 });
-        break;
-      case 'fireworks':
-        this.audio.effect('tada', { velocity: 0.7 });
-        break;
-      case 'comet-left':
-        this.audio.effect('swoosh', { velocity: 0.7, pan: -0.6 });
-        break;
-      case 'comet-right':
-        this.audio.effect('swoosh', { velocity: 0.7, pan: 0.6 });
-        break;
-      case 'comet-up':
-      case 'comet-down':
-        this.audio.effect('swoosh', { velocity: 0.7 });
-        break;
-    }
-  }
-
   /**
    * What to say for a key press: nothing while mashing, sometimes the child's
    * name instead (every ~40 presses, or on Enter), otherwise the content's line.
    */
-  private speechFor(text: string | null, now: number, isEnter: boolean): string | null {
-    const mashing = now - this.lastKeyAt < MASH_GAP_MS || now < this.quietUntil;
+  private speechFor(text: string | null, mashing: boolean, isClear: boolean): string | null {
     this.keysSinceCheer++;
     const name = this.settings.childName;
-    if (name && !mashing && (isEnter || this.keysSinceCheer >= this.nextCheerAt)) {
+    if (name && !mashing && (isClear || this.keysSinceCheer >= this.nextCheerAt)) {
       this.keysSinceCheer = 0;
       this.nextCheerAt = this.cheerInterval();
       return `Yay, ${name}!`;
@@ -996,6 +1142,21 @@ export class Game {
     else if (this.labels.size < MAX_LABELS) this.labels.set(label, 1);
   }
 
+  private later(ms: number, fn: () => void): void {
+    if (this.lessonTimers.length >= 32) return; // never more than a counting run + a rainbow
+    this.lessonTimers.push(setTimeout(fn, ms));
+  }
+
+  /** Cancel counting ticks / rainbow notes (and, unless told otherwise, a pending next prompt). */
+  private clearLessonTimers(includePrompt = true): void {
+    for (const t of this.lessonTimers) clearTimeout(t);
+    this.lessonTimers.length = 0;
+    if (includePrompt && this.nextPromptTimer !== null) {
+      clearTimeout(this.nextPromptTimer);
+      this.nextPromptTimer = null;
+    }
+  }
+
   // -------------------------------------------------------------------------
   // Pointer
   // -------------------------------------------------------------------------
@@ -1013,36 +1174,33 @@ export class Game {
       return;
     }
 
-    const content = contentForTap(this.content);
+    const content = this.lessons.forTap(this.content);
     const midi = this.noteForX(x);
     if (content.kind === 'shape') {
       this.scene.spawnShape({ shape: content.shape, x, y, color: content.color });
       this.scene.ripple(x, y, content.color);
-      const name = this.settings.speech === 'off' ? null : `${content.color.name} ${shapeLabel(content.shape)}`;
-      this.remember('shape', content.shape, midi, null, content.speak ?? name);
       this.say(content.speak);
-    } else if (content.kind === 'emoji') {
-      this.scene.spawnEmoji({ emoji: content.emoji, x, y });
-      this.scene.ripple(x, y, this.randomColor());
-      this.remember('emoji', content.emoji, midi, null, null);
     } else {
       this.scene.ripple(x, y, this.randomColor());
     }
-    this.playNote(midi, x, 0.7, 'bubble');
+    this.playNote(midi, x, 0.45, 'tap');
   };
 
-  /** A poke hit something: replay that object's sound (and word). */
+  /** A poke hit something: replay its lesson (word, counting) or name the shape. */
   private replay(hit: PokeResult, x: number): void {
-    const mem = this.memory.get(`${hit.kind}:${hit.value}`);
+    const mem = hit.cardId !== null ? this.memory.get(hit.cardId) : undefined;
     if (mem) {
-      if (mem.midi !== null) this.playNote(mem.midi, x, 0.75, 'pop');
-      else if (mem.effect) this.audio.effect(mem.effect, { velocity: 0.7, pan: this.panFor(x) });
-      this.say(mem.speak);
+      if (mem.midi !== null) this.playNote(mem.midi, x, 0.5, 'tap');
+      if (mem.count) this.count(mem.count, mem.speak);
+      else if (mem.speak) this.speaker.say(mem.speak, 'high');
       return;
     }
-    // Not remembered (idle friends, evicted): something sensible for its kind.
-    if (hit.kind === 'emoji') this.audio.effect('boing', { velocity: 0.6, pan: this.panFor(x) });
-    else this.playNote(this.noteForX(x), x, 0.75, 'pop');
+    if (hit.kind === 'shape' && hit.color) {
+      this.playNote(this.noteForX(x), x, 0.45, 'tap');
+      if (this.settings.speech !== 'off') this.speaker.say(`${hit.color.name} ${hit.value}`);
+      return;
+    }
+    this.audio.effect('pop', { velocity: 0.5, pan: this.panFor(x) });
   }
 
   private readonly onDrag = (x: number, y: number, dx: number, dy: number, pointerId: number): void => {
@@ -1054,8 +1212,7 @@ export class Game {
     if (Number.isFinite(moved)) drag.dist += moved;
     if (drag.dist >= DRAG_NOTE_PX) {
       drag.dist %= DRAG_NOTE_PX; // one note per event, however far it jumped
-      this.playNote(this.noteForY(y), x, 0.5, 'bubble');
-      this.scene.burst(x, y, drag.color, 0.25);
+      this.playNote(this.noteForY(y), x, 0.35, 'tap');
     }
   };
 
@@ -1116,11 +1273,6 @@ export class Game {
     return { width: v.width > 0 ? v.width : 1, height: v.height > 0 ? v.height : 1 };
   }
 
-  private centre(): Spot {
-    const { width, height } = this.size();
-    return { x: width / 2, y: height / 2 };
-  }
-
   /** A physical key position mapped into the safe area (no jitter), or null. */
   private mapToSafe(pos: KeyPosition | null): Spot | null {
     if (!pos) return null;
@@ -1136,7 +1288,7 @@ export class Game {
   private spotFor(pos: KeyPosition | null): Spot {
     const { width, height } = this.size();
     let spot: Spot;
-    const mapped = this.settings.spatialKeys ? this.mapToSafe(pos) : null;
+    const mapped = this.mapToSafe(pos);
     if (mapped) {
       spot = {
         x: mapped.x + (this.rng() * 2 - 1) * JITTER * width,
@@ -1176,18 +1328,9 @@ export class Game {
     return { x: bestX, y: bestY };
   }
 
-  private rememberSpot(code: string, x: number, y: number, color: NamedColor): void {
-    if (!this.keySpots.has(code) && this.keySpots.size >= MAX_KEY_SPOTS) {
-      const oldest = this.keySpots.keys().next();
-      if (!oldest.done) this.keySpots.delete(oldest.value);
-    }
-    this.keySpots.set(code, { x, y, color });
-  }
-
-  private remember(kind: PokeResult['kind'], value: string, midi: number | null, effect: SoundEffect | null, speak: string | null): void {
-    const key = `${kind}:${value}`;
-    this.memory.delete(key); // re-insert as the newest
-    this.memory.set(key, { midi, effect, speak });
+  private remember(cardId: number, midi: number | null, speak: string | null, count: string[] | null): void {
+    this.memory.delete(cardId); // re-insert as the newest
+    this.memory.set(cardId, { midi, speak, count });
     if (this.memory.size > MEMORY_SIZE) {
       const oldest = this.memory.keys().next();
       if (!oldest.done) this.memory.delete(oldest.value);

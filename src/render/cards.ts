@@ -240,7 +240,8 @@ export function renderCard(spec: CardSpec, w: number, h: number, style: CardStyl
 
   const surface = spec.kind === 'picture' || !spec.color ? world.surface : spec.color.container;
   const ink = spec.color?.ink ?? world.onSurface;
-  const neutral = world.dark ? '#D5DAE5' : '#3A3F47';
+  // The featured letter is drawn in ink; the rest of the word steps back so it stands out.
+  const neutral = world.dark ? '#98A1B3' : '#5B616B';
   const radius = Math.min(w * 0.12, h * 0.18);
 
   // Baked elevation: a tight contact shadow and a soft ambient one.
