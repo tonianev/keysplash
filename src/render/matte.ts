@@ -330,6 +330,8 @@ const RAINBOW_FADE = 0.6;
 
 export class Rainbow {
   private t = 0;
+  /** Real-clock start (ms), so band timing stays in step with the spoken colour names even at low frame rates. */
+  private startMs = Number.NaN;
   private colors: string[] = [];
   private active = false;
   private reduce = false;
@@ -337,6 +339,7 @@ export class Rainbow {
   start(colors: readonly NamedColor[], reduceMotion: boolean): void {
     this.colors = colors.slice(0, 8).map((c) => c.hex);
     this.t = 0;
+    this.startMs = Number.NaN;
     this.active = this.colors.length > 0;
     this.reduce = reduceMotion;
   }
@@ -351,9 +354,15 @@ export class Rainbow {
     return (this.colors.length - 1) * step + BAND_SWEEP + RAINBOW_HOLD + RAINBOW_FADE;
   }
 
-  update(dt: number): void {
+  /** Advance by `dt` seconds, or — when `nowMs` is given — follow the real clock. */
+  update(dt: number, nowMs?: number): void {
     if (!this.active) return;
-    this.t += dt;
+    if (nowMs !== undefined && Number.isFinite(nowMs)) {
+      if (Number.isNaN(this.startMs)) this.startMs = nowMs;
+      this.t = Math.max(0, (nowMs - this.startMs) / 1000);
+    } else {
+      this.t += dt;
+    }
     if (this.t >= this.duration()) this.active = false;
   }
 

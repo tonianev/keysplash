@@ -1,5 +1,18 @@
 # KeySplash — product & architecture spec
 
+> **v2 (current).** The product was redesigned around learning and a matte,
+> calm look — see [DESIGN.md](DESIGN.md), which wins wherever this file
+> disagrees. In short: one flashcard per press (focus layout with a shelf, or
+> cards where the key sits), words rotate in order, numbers count into a
+> ten-frame in step with speech, shapes say colour + name, arrows say
+> directions, Space names the rainbow, other keys show a fixed picture; Find
+> letters / Find numbers / Spell games with hints and local progress; soft
+> felt/marimba/kalimba/celesta/harp tones; flat backdrops; Andika letterforms;
+> no fireworks, glows, sparkles or cartoon effects. The safety and robustness
+> rules below (non-negotiables, lockdown, panel access, session timer, bounded
+> memory) still apply unchanged. Sections describing v1 visuals (glyph
+> sprites, fireworks, comets, spatial-keys setting) are historical.
+
 A fullscreen keyboard-smash toy for babies and toddlers (ages ~1–5), built so a
 parent working from home can hand over the laptop safely. Inspired by
 tinyfingers.net but much better:
@@ -21,7 +34,7 @@ tinyfingers.net but much better:
 ## Non-negotiables
 
 1. **No network.** No CDNs, no fonts from Google, no analytics, no external
-   URLs at runtime. Everything is bundled (font comes from `@fontsource/fredoka`).
+   URLs at runtime. Everything is bundled (font comes from `@fontsource/andika`).
 2. **Never trap a parent.** The parent can always: type the secret word
    (default `parent`), hold the top-left corner for 2.5 s, or hold Escape
    (browser-native exit from keyboard-locked fullscreen). The OS app switcher

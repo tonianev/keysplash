@@ -494,7 +494,8 @@ button {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  /* Auto margins (below) centre the content but still let a tall screen scroll to its top. */
+  justify-content: flex-start;
   gap: 18px;
   padding: calc(24px + var(--ks-safe-t)) calc(20px + var(--ks-safe-r)) calc(20px + var(--ks-safe-b)) calc(20px + var(--ks-safe-l));
   overflow-y: auto;
@@ -505,6 +506,14 @@ button {
 
 .ks-start.is-shown {
   opacity: 1;
+}
+
+.ks-start > :first-child {
+  margin-top: auto;
+}
+
+.ks-start > :last-child {
+  margin-bottom: auto;
 }
 
 .ks-start__main {

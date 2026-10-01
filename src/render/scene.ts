@@ -76,8 +76,10 @@ interface CardEnt {
   ta: number;
   /** Seconds in the current place (shelf ageing, keyboard life, count reveal). */
   age: number;
-  /** Seconds since the card was shown (count reveal clock). */
+  /** Seconds since the card was shown (frame time). */
   shown: number;
+  /** Real-clock ms when the card first got a frame (count reveal follows speech timers, not frame rate). */
+  bornAt: number;
   pulse: number;
   hop: number;
   glide: number;
@@ -115,6 +117,8 @@ export class CanvasScene implements Scene {
   private oldBackdrop: Backdrop | null = null;
   private fade = 1;
   private nextId = 1;
+  /** Latest frame time (ms, performance.now origin). */
+  private clock = 0;
   private centre: CardEnt | null = null;
   private readonly shelf: CardEnt[] = [];
   private readonly free: CardEnt[] = [];
@@ -210,7 +214,7 @@ export class CanvasScene implements Scene {
     const ent: CardEnt = {
       id, spec, place: 'centre', w: size.w, h: size.h,
       x: 0, y: 0, s: ENTER_SCALE, a: 0, tx: 0, ty: 0, ts: 1, ta: 1,
-      age: 0, shown: 0, pulse: 0, hop: 0, glide: spec.direction ? GLIDE_TIME : 0,
+      age: 0, shown: 0, bornAt: Number.NaN, pulse: 0, hop: 0, glide: spec.direction ? GLIDE_TIME : 0,
       sprite: null, spriteKey: '',
     };
 
@@ -475,6 +479,7 @@ export class CanvasScene implements Scene {
   // -------------------------------------------------------------------------
 
   update(dt: number, now: number): void {
+    this.clock = now;
     this.calm += (this.calmTarget - this.calm) * (1 - Math.exp(-dt * 2));
     const slow = dt * (1 - 0.7 * this.calm);
     this.backdrop.update(dt, now, this.calm);
@@ -489,6 +494,7 @@ export class CanvasScene implements Scene {
     const step = (c: CardEnt): void => {
       c.age += dt;
       c.shown += dt;
+      if (Number.isNaN(c.bornAt)) c.bornAt = now;
       if (reduce) {
         c.x = c.tx;
         c.y = c.ty;
@@ -556,7 +562,7 @@ export class CanvasScene implements Scene {
     this.particles.update(slow, this.world.gravity >= 0 ? 60 : -30);
     this.ripples.update(dt);
     this.paint.update(dt);
-    this.rainbow.update(dt);
+    this.rainbow.update(dt, now);
   }
 
   /** Keyboard layout: overlapping cards push apart softly. */
@@ -650,14 +656,15 @@ export class CanvasScene implements Scene {
   /** Counted pictures appear one per TIMING.countStepMs in the ten-frame. */
   private drawCount(c: CardEnt, x: number, y: number, s: number, count: number): void {
     const stepS = TIMING.countStepMs / 1000;
-    const shown = Math.min(count, Math.floor(c.shown / stepS) + 1);
+    const elapsed = Number.isNaN(c.bornAt) ? 0 : Math.max(0, (this.clock - c.bornAt) / 1000);
+    const shown = Math.min(count, Math.floor(elapsed / stepS) + 1);
     const { cells, cell } = tenFrame(c.w, c.h);
     const sprite = this.emojiSprite(c.spec.picture as string, cell * 0.66);
     if (!sprite) return;
     const ctx = this.ctx;
     const base = (sprite.width / this.dpr) * s;
     for (let i = 0; i < shown; i++) {
-      const since = c.shown - i * stepS;
+      const since = elapsed - i * stepS;
       const pop = this.options.reduceMotion ? 1 : Math.min(1, since / COUNT_POP);
       const k = base * (0.6 + 0.4 * (1 - (1 - pop) * (1 - pop)));
       ctx.drawImage(sprite, x + cells[i * 2] * s - k / 2, y + cells[i * 2 + 1] * s - k / 2, k, k);
